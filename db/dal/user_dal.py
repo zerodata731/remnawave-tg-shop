@@ -93,6 +93,17 @@ async def set_user_ban_status(
     return False
 
 
+async def get_banned_users(session: AsyncSession) -> List[User]:
+    """Get all banned users"""
+    stmt = (
+        select(User)
+        .where(User.is_banned == True)
+        .order_by(User.registration_date.desc())
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
 async def get_banned_users_paginated(
     session: AsyncSession, limit: int, offset: int
 ) -> Tuple[List[User], int]:

@@ -291,8 +291,8 @@ async def handle_reset_trial(callback: types.CallbackQuery, user: User,
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     
     try:
-        # Deactivate all user subscriptions
-        await subscription_dal.deactivate_all_user_subscriptions(session, user.user_id)
+        # Delete all user subscriptions to reset trial eligibility
+        await subscription_dal.delete_all_user_subscriptions(session, user.user_id)
         await session.commit()
         
         await callback.answer(_(
@@ -362,7 +362,10 @@ async def handle_toggle_ban(callback: types.CallbackQuery, user: User,
         
         # Refresh user card with updated ban status
         user.is_banned = new_ban_status  # Update local object
-        await handle_refresh_user_card(callback, user, None, session, i18n_instance, lang)
+        from config.settings import Settings
+        settings = Settings()
+        subscription_service = SubscriptionService(settings)
+        await handle_refresh_user_card(callback, user, subscription_service, session, i18n_instance, lang)
         
     except Exception as e:
         logging.error(f"Error toggling ban for user {user.user_id}: {e}")
@@ -624,8 +627,9 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
             user_id=target_user_id
         ))
         
-        # Show user card again
-        user_card_text = await format_user_card(target_user, session, None, i18n, current_lang)
+        # Show user card again  
+        subscription_service = SubscriptionService(settings)
+        user_card_text = await format_user_card(target_user, session, subscription_service, i18n, current_lang)
         keyboard = get_user_card_keyboard(target_user.user_id, i18n, current_lang)
         
         await message.answer(
@@ -642,3 +646,48 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
         ))
     
     await state.clear()
+
+
+async def view_banned_users_handler(callback: types.CallbackQuery,
+                                  state: FSMContext, i18n_data: dict,
+                                  settings: Settings, session: AsyncSession):
+    """Display list of banned users"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error preparing banned users list.", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    try:
+        # Get banned users
+        banned_users = await user_dal.get_banned_users(session)
+        
+        if not banned_users:
+            message_text = _(
+                "admin_banned_users_empty",
+                default="📋 Заблокированные пользователи\n\nСписок пуст"
+            )
+        else:
+            user_list = []
+            for user in banned_users:
+                display_name = user.telegram_first_name or "Unknown"
+                if user.telegram_username:
+                    display_name = f"@{user.telegram_username}"
+                user_list.append(f"• {display_name} (ID: {user.user_id})")
+            
+            message_text = _(
+                "admin_banned_users_list",
+                default="📋 Заблокированные пользователи ({count}):\n\n{users}",
+                count=len(banned_users),
+                users="\n".join(user_list)
+            )
+
+        await callback.message.edit_text(
+            message_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+        
+    except Exception as e:
+        logging.error(f"Error displaying banned users: {e}")
+        await callback.answer("Error loading banned users", show_alert=True)

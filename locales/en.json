@@ -299,5 +299,29 @@
   "log_new_user_registration": "👤 <b>New User</b>\n\n🆔 ID: <code>{user_id}</code>\n👤 Name: {user_display}{referral_text}\n📅 Time: {timestamp}",
   "log_payment_received": "{provider_emoji} <b>Payment Received</b>\n\n👤 User: {user_display}\n💰 Amount: <b>{amount} {currency}</b>\n📅 Period: <b>{months} mo.</b>\n🏦 Provider: {payment_provider}\n🕐 Time: {timestamp}",
   "log_promo_activation": "🎁 <b>Promo Code Activated</b>\n\n👤 User: {user_display}\n🏷 Code: <code>{promo_code}</code>\n🎯 Bonus: <b>+{bonus_days}d</b>\n🕐 Time: {timestamp}",
-  "log_trial_activation": "🆓 <b>Trial Activated</b>\n\n👤 User: {user_display}\n⏰ Valid until: <b>{end_date}</b>\n🕐 Time: {timestamp}"
+  "log_trial_activation": "🆓 <b>Trial Activated</b>\n\n👤 User: {user_display}\n⏰ Valid until: <b>{end_date}</b>\n🕐 Time: {timestamp}",
+  
+  "admin_general_cancel_operation": "Operation cancelled ❌",
+  "admin_promo_codes_menu_bulk_create": "📦 Bulk Creation",
+  "admin_bulk_promo_create_prompt": "📦 Bulk Promo Code Creation\n\nEnter data in format:\n<code>quantity|days|description</code>\n\nExample:\n<code>10|7|Weekly promo</code>",
+  "admin_bulk_promo_invalid_format": "❌ Invalid format. Use: quantity|days|description",
+  "admin_bulk_promo_created_success": "✅ Created {count} promo codes for {days} days!\n\nDescription: {description}\nCodes: {codes}",
+  
+  "admin_logs_export_csv": "📄 Export to CSV",
+  "admin_logs_csv_export_started": "📄 Starting log export to CSV...",
+  "admin_logs_csv_export_success": "✅ Logs exported! File attached above.",
+  
+  "admin_csv_header_log_id": "Log ID",
+  "admin_csv_header_timestamp": "Timestamp",
+  "admin_csv_header_user_id": "User ID",
+  "admin_csv_header_telegram_username": "Username",
+  "admin_csv_header_telegram_first_name": "First Name",
+  "admin_csv_header_event_type": "Event Type",
+  "admin_csv_header_content": "Content",
+  "admin_csv_header_is_admin_event": "Admin Event",
+  "admin_csv_header_target_user_id": "Target User ID",
+  "admin_csv_header_raw_update_preview": "Update Preview",
+  
+  "admin_banned_users_empty": "📋 Banned Users\n\nList is empty",
+  "admin_banned_users_list": "📋 Banned Users ({count}):\n\n{users}"
 }

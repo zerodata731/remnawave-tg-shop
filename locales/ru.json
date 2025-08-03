@@ -299,5 +299,29 @@
   "log_new_user_registration": "👤 <b>Новый пользователь</b>\n\n🆔 ID: <code>{user_id}</code>\n👤 Имя: {user_display}{referral_text}\n📅 Время: {timestamp}",
   "log_payment_received": "{provider_emoji} <b>Получен платеж</b>\n\n👤 Пользователь: {user_display}\n💰 Сумма: <b>{amount} {currency}</b>\n📅 Период: <b>{months} мес.</b>\n🏦 Провайдер: {payment_provider}\n🕐 Время: {timestamp}",
   "log_promo_activation": "🎁 <b>Активирован промокод</b>\n\n👤 Пользователь: {user_display}\n🏷 Код: <code>{promo_code}</code>\n🎯 Бонус: <b>+{bonus_days} дн.</b>\n🕐 Время: {timestamp}",
-  "log_trial_activation": "🆓 <b>Активирован триал</b>\n\n👤 Пользователь: {user_display}\n⏰ Действует до: <b>{end_date}</b>\n🕐 Время: {timestamp}"
+  "log_trial_activation": "🆓 <b>Активирован триал</b>\n\n👤 Пользователь: {user_display}\n⏰ Действует до: <b>{end_date}</b>\n🕐 Время: {timestamp}",
+  
+  "admin_general_cancel_operation": "Операция отменена ❌",
+  "admin_promo_codes_menu_bulk_create": "📦 Массовое создание",
+  "admin_bulk_promo_create_prompt": "📦 Массовое создание промокодов\n\nВведите данные в формате:\n<code>количество|дни|описание</code>\n\nПример:\n<code>10|7|Промо на неделю</code>",
+  "admin_bulk_promo_invalid_format": "❌ Неверный формат. Используйте: количество|дни|описание",
+  "admin_bulk_promo_created_success": "✅ Создано {count} промокодов на {days} дней!\n\nОписание: {description}\nПромокоды: {codes}",
+  
+  "admin_logs_export_csv": "📄 Экспорт в CSV",
+  "admin_logs_csv_export_started": "📄 Начинаю экспорт логов в CSV...",
+  "admin_logs_csv_export_success": "✅ Логи экспортированы! Файл прикреплен выше.",
+  
+  "admin_csv_header_log_id": "ID Лога",
+  "admin_csv_header_timestamp": "Время",
+  "admin_csv_header_user_id": "ID Пользователя",
+  "admin_csv_header_telegram_username": "Username",
+  "admin_csv_header_telegram_first_name": "Имя",
+  "admin_csv_header_event_type": "Тип события",
+  "admin_csv_header_content": "Содержание",
+  "admin_csv_header_is_admin_event": "Админ событие",
+  "admin_csv_header_target_user_id": "ID Целевого юзера",
+  "admin_csv_header_raw_update_preview": "Превью обновления",
+  
+  "admin_banned_users_empty": "📋 Заблокированные пользователи\n\nСписок пуст",
+  "admin_banned_users_list": "📋 Заблокированные пользователи ({count}):\n\n{users}"
 }

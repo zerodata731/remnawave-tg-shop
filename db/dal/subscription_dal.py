@@ -144,6 +144,18 @@ async def deactivate_all_user_subscriptions(
     return result.rowcount
 
 
+async def delete_all_user_subscriptions(
+        session: AsyncSession, user_id: int) -> int:
+    """Completely delete all user subscriptions (for trial reset)"""
+    stmt = delete(Subscription).where(Subscription.user_id == user_id)
+    result = await session.execute(stmt)
+    if result.rowcount > 0:
+        logging.info(
+            f"Deleted {result.rowcount} subscription records for user {user_id} for trial reset."
+        )
+    return result.rowcount
+
+
 async def update_subscription_end_date(
         session: AsyncSession, subscription_id: int,
         new_end_date: datetime) -> Optional[Subscription]:
