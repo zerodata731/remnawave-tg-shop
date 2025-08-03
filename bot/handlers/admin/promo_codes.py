@@ -653,63 +653,258 @@ async def promo_edit_select_handler(callback: types.CallbackQuery, state: FSMCon
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    await state.update_data(edit_promo_id=promo_id)
-    await state.set_state(AdminStates.waiting_for_promo_edit_details)
+    await state.update_data(
+        edit_promo_id=promo_id,
+        original_code=promo.code,
+        original_bonus_days=promo.bonus_days,
+        original_max_activations=promo.max_activations,
+        original_valid_until=promo.valid_until
+    )
+    
+    # Step 1: Edit code
+    prompt_text = _(
+        "admin_promo_edit_step1_code",
+        default="✏️ <b>Редактирование промокода</b>\n\n<b>Шаг 1 из 4:</b> Код промокода\n\nТекущий код: <b>{current_code}</b>\n\nВведите новый код промокода (3-30 символов, только буквы и цифры) или отправьте текущий для сохранения:",
+        current_code=promo.code
+    )
+    
+    await state.set_state(AdminStates.waiting_for_promo_edit_code)
     await callback.message.edit_text(
-        _("admin_promo_edit_prompt", code=promo.code),
+        prompt_text,
         reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
         parse_mode="HTML")
     await callback.answer()
 
 
-@router.message(AdminStates.waiting_for_promo_edit_details, F.text)
-async def process_promo_edit_details(message: types.Message, state: FSMContext,
-                                     i18n_data: dict, settings: Settings,
-                                     session: AsyncSession):
-    data = await state.get_data()
-    promo_id = data.get("edit_promo_id")
+# Step 1: Process edited code
+@router.message(AdminStates.waiting_for_promo_edit_code, F.text)
+async def process_promo_edit_code_handler(message: types.Message, state: FSMContext,
+                                         i18n_data: dict, settings: Settings,
+                                         session: AsyncSession):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
-    if not i18n or not promo_id:
-        await message.answer("Error")
-        await state.clear()
+    if not i18n:
+        await message.reply("Language service error.")
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
-
-    parts = message.text.strip().split()
-    if not (3 <= len(parts) <= 4):
-        await message.answer(_("admin_promo_invalid_format"))
-        return
+    
+    data = await state.get_data()
+    original_code = data.get("original_code")
+    
     try:
-        code_str = parts[0].upper()
-        bonus = int(parts[1])
-        max_act = int(parts[2])
-        valid_until = None
-        if len(parts) == 4:
-            days = int(parts[3])
-            valid_until = datetime.now(timezone.utc) + timedelta(days=days)
-    except Exception:
-        await message.answer(_("admin_promo_invalid_format_general"))
-        return
-
-    update_data = {
-        "code": code_str,
-        "bonus_days": bonus,
-        "max_activations": max_act,
-        "valid_until": valid_until,
-    }
-    updated = await promo_code_dal.update_promo_code(session, promo_id, update_data)
-    if updated:
-        await session.commit()
-        await message.answer(
-            _("admin_promo_updated_success", code=code_str),
-            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
-            parse_mode="HTML",
+        code_str = message.text.strip().upper()
+        if not (3 <= len(code_str) <= 30 and code_str.isalnum()):
+            await message.answer(_(
+                "admin_promo_invalid_code_format",
+                default="❌ Код промокода должен содержать 3-30 символов (только буквы и цифры)"
+            ))
+            return
+        
+        # Check if code already exists (except current promo)
+        if code_str != original_code:
+            existing_promo = await promo_code_dal.get_promo_code_by_code(session, code_str)
+            if existing_promo:
+                await message.answer(_(
+                    "admin_promo_code_already_exists",
+                    default="❌ Промокод с таким кодом уже существует"
+                ))
+                return
+        
+        await state.update_data(new_code=code_str)
+        
+        # Step 2: Ask for bonus days  
+        prompt_text = _(
+            "admin_promo_edit_step2_bonus_days",
+            default="✏️ <b>Редактирование промокода</b>\n\n<b>Шаг 2 из 4:</b> Бонусные дни\n\nКод: <b>{code}</b>\nТекущие дни: <b>{current_days}</b>\n\nВведите количество бонусных дней (1-365):",
+            code=code_str,
+            current_days=data.get("original_bonus_days")
         )
-    else:
-        await session.rollback()
-        await message.answer(_("admin_promo_not_found"))
-    await state.clear()
+        
+        await message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_promo_edit_bonus_days)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_promo_invalid_code_format",
+            default="❌ Код промокода должен содержать 3-30 символов (только буквы и цифры)"
+        ))
+
+
+# Step 2: Process edited bonus days
+@router.message(AdminStates.waiting_for_promo_edit_bonus_days, F.text)
+async def process_promo_edit_bonus_days_handler(message: types.Message, state: FSMContext,
+                                               i18n_data: dict, settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+    
+    data = await state.get_data()
+    
+    try:
+        bonus_days = int(message.text.strip())
+        if not (1 <= bonus_days <= 365):
+            await message.answer(_(
+                "admin_promo_invalid_bonus_days",
+                default="❌ Количество дней должно быть от 1 до 365"
+            ))
+            return
+        
+        await state.update_data(new_bonus_days=bonus_days)
+        
+        # Step 3: Ask for max activations
+        prompt_text = _(
+            "admin_promo_edit_step3_max_activations",
+            default="✏️ <b>Редактирование промокода</b>\n\n<b>Шаг 3 из 4:</b> Максимальные активации\n\nКод: <b>{code}</b>\nДни: <b>{days}</b>\nТекущие активации: <b>{current_max}</b>\n\nВведите максимальное количество активаций (1-10000):",
+            code=data.get("new_code"),
+            days=bonus_days,
+            current_max=data.get("original_max_activations")
+        )
+        
+        await message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_promo_edit_max_activations)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_promo_invalid_bonus_days",
+            default="❌ Количество дней должно быть от 1 до 365"
+        ))
+
+
+# Step 3: Process edited max activations
+@router.message(AdminStates.waiting_for_promo_edit_max_activations, F.text)
+async def process_promo_edit_max_activations_handler(message: types.Message, state: FSMContext,
+                                                    i18n_data: dict, settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+    
+    data = await state.get_data()
+    
+    try:
+        max_activations = int(message.text.strip())
+        if not (1 <= max_activations <= 10000):
+            await message.answer(_(
+                "admin_promo_invalid_max_activations",
+                default="❌ Количество активаций должно быть от 1 до 10000"
+            ))
+            return
+        
+        await state.update_data(new_max_activations=max_activations)
+        
+        # Step 4: Ask for validity days
+        current_valid_until = data.get("original_valid_until")
+        current_validity_str = _("admin_promo_valid_indefinitely", default="Неограниченно")
+        if current_valid_until:
+            current_validity_str = current_valid_until.strftime('%Y-%m-%d')
+        
+        prompt_text = _(
+            "admin_promo_edit_step4_validity",
+            default="✏️ <b>Редактирование промокода</b>\n\n<b>Шаг 4 из 4:</b> Срок действия\n\nКод: <b>{code}</b>\nДни: <b>{days}</b>\nАктивации: <b>{max_act}</b>\nТекущий срок: <b>{current_validity}</b>\n\nВведите количество дней действия промокода от сегодня (1-365) или 0 для неограниченного срока:",
+            code=data.get("new_code"),
+            days=data.get("new_bonus_days"),
+            max_act=max_activations,
+            current_validity=current_validity_str
+        )
+        
+        await message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_promo_edit_validity_days)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_promo_invalid_max_activations",
+            default="❌ Количество активаций должно быть от 1 до 10000"
+        ))
+
+
+# Step 4: Process edited validity and finalize
+@router.message(AdminStates.waiting_for_promo_edit_validity_days, F.text)
+async def process_promo_edit_validity_handler(message: types.Message, state: FSMContext,
+                                             i18n_data: dict, settings: Settings,
+                                             session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+    
+    data = await state.get_data()
+    promo_id = data.get("edit_promo_id")
+    
+    try:
+        validity_days = int(message.text.strip())
+        if not (0 <= validity_days <= 365):
+            await message.answer(_(
+                "admin_promo_invalid_validity_days",
+                default="❌ Срок действия должен быть от 0 до 365 дней (0 = неограниченно)"
+            ))
+            return
+        
+        # Calculate validity date
+        valid_until_date = None
+        valid_until_str_display = _("admin_promo_valid_indefinitely", default="Неограниченно")
+        if validity_days > 0:
+            valid_until_date = datetime.now(timezone.utc) + timedelta(days=validity_days)
+            valid_until_str_display = valid_until_date.strftime('%Y-%m-%d')
+        
+        # Update promo code
+        update_data = {
+            "code": data.get("new_code"),
+            "bonus_days": data.get("new_bonus_days"),
+            "max_activations": data.get("new_max_activations"),
+            "valid_until": valid_until_date,
+        }
+        
+        updated = await promo_code_dal.update_promo_code(session, promo_id, update_data)
+        if updated:
+            await session.commit()
+            
+            success_text = _(
+                "admin_promo_updated_success",
+                default="✅ Промокод обновлен!\n\n🎟 Код: <b>{code}</b>\n🎁 Бонусные дни: <b>{days}</b>\n🔢 Максимальные активации: <b>{max_act}</b>\n⏰ Действует до: <b>{validity}</b>",
+                code=data.get("new_code"),
+                days=data.get("new_bonus_days"),
+                max_act=data.get("new_max_activations"),
+                validity=valid_until_str_display
+            )
+            
+            await message.answer(
+                success_text,
+                reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+                parse_mode="HTML"
+            )
+        else:
+            await session.rollback()
+            await message.answer(_(
+                "admin_promo_update_failed",
+                default="❌ Ошибка обновления промокода"
+            ))
+        
+        await state.clear()
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_promo_invalid_validity_days",
+            default="❌ Срок действия должен быть от 0 до 365 дней (0 = неограниченно)"
+        ))
 
 
 @router.callback_query(F.data.startswith("promo_delete:"))
