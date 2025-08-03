@@ -105,6 +105,10 @@ async def admin_panel_actions_callback_handler(
     elif action == "view_logs_menu":
         await admin_logs_handlers.display_logs_menu(callback, i18n_data,
                                                     settings, session)
+    elif action == "promo_management":
+        from . import promo_codes as admin_promo_handlers
+        await admin_promo_handlers.promo_management_handler(
+            callback, i18n_data, settings, session)
     elif action == "sync_panel":
 
         await admin_sync_handlers.sync_command_handler(
