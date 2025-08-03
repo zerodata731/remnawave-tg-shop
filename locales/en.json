@@ -283,7 +283,7 @@
   "inline_admin_financial_stats_title": "💰 Financial Statistics",
   "inline_admin_financial_stats_desc": "Today: {today:.2f} RUB",
   
-  "inline_system_stats_message": "🖥 <b>System Statistics</b>\n\n🟢 Online: <b>{online}</b>\n🔴 Offline: <b>{offline}</b>\n⏰ Expired: <b>{expired}</b>\n👥 Total users: <b>{total}</b>",
+  "inline_system_stats_message": "🖥 <b>Panel Statistics</b>\n\n🟢 Online: <b>{online}</b>\n📊 Active: <b>{active}</b>\n🔴 Disabled: <b>{disabled}</b>\n⏰ Expired: <b>{expired}</b>\n⚠️ Limited: <b>{limited}</b>\n👥 Total users: <b>{total}</b>\n💾 RAM Usage: <b>{memory:.1f}%</b>\n📊 Week traffic: <b>{week_traffic}</b>\n📊 Month traffic: <b>{month_traffic}</b>\n🔗 Active nodes: <b>{active_nodes}/{total_nodes}</b>",
   "inline_admin_system_stats_title": "🖥 System Statistics",
   "inline_admin_system_stats_desc": "Online: {online}, Offline: {offline}",
   
@@ -306,6 +306,7 @@
   "admin_bulk_promo_create_prompt": "📦 Bulk Promo Code Creation\n\nEnter data in format:\n<code>quantity|days|description</code>\n\nExample:\n<code>10|7|Weekly promo</code>",
   "admin_bulk_promo_invalid_format": "❌ Invalid format. Use: quantity|days|description",
   "admin_bulk_promo_created_success": "✅ Created {count} promo codes for {days} days!",
+  "admin_bulk_promo_codes_file": "📄 All created promo codes in file ({count} pcs.)",
   
   "admin_logs_export_csv": "📄 Export to CSV",
   "admin_logs_csv_export_started": "📄 Starting log export to CSV...",
