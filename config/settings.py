@@ -1,6 +1,6 @@
 import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, ValidationError, computed_field
+from pydantic import Field, ValidationError, computed_field, field_validator
 from typing import Optional, List, Dict, Any
 
 
@@ -292,6 +292,14 @@ class Settings(BaseSettings):
     # Logging Configuration
     LOG_CHAT_ID: Optional[int] = Field(default=None, description="Telegram chat/group ID for sending notifications")
     LOG_THREAD_ID: Optional[int] = Field(default=None, description="Thread ID for supergroup messages (optional)")
+    
+    @field_validator('LOG_CHAT_ID', 'LOG_THREAD_ID', mode='before')
+    @classmethod
+    def validate_optional_int_fields(cls, v):
+        """Convert empty strings to None for optional integer fields"""
+        if isinstance(v, str) and v.strip() == '':
+            return None
+        return v
     
     # Notification types
     LOG_NEW_USERS: bool = Field(default=True, description="Send notifications for new user registrations")
