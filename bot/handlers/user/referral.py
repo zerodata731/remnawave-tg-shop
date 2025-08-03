@@ -87,7 +87,8 @@ async def referral_command_handler(event: Union[types.Message,
              referral_link=referral_link,
              bonus_details=bonus_details_str)
 
-    reply_markup_val = get_back_to_main_menu_markup(current_lang, i18n)
+    from bot.keyboards.inline.user_keyboards import get_referral_link_keyboard
+    reply_markup_val = get_referral_link_keyboard(current_lang, i18n)
 
     if isinstance(event, types.Message):
         await event.answer(text,
@@ -106,3 +107,37 @@ async def referral_command_handler(event: Union[types.Message,
                                        reply_markup=reply_markup_val,
                                        disable_web_page_preview=True)
         await event.answer()
+
+
+@router.callback_query(F.data.startswith("referral_action:"))
+async def referral_action_handler(callback: types.CallbackQuery, settings: Settings, 
+                                 i18n_data: dict, referral_service: ReferralService, 
+                                 bot: Bot, session: AsyncSession):
+    action = callback.data.split(":")[1]
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    if action == "share_message":
+        try:
+            bot_info = await bot.get_me()
+            bot_username = bot_info.username
+            if not bot_username:
+                await callback.answer("Ошибка получения имени бота", show_alert=True)
+                return
+
+            inviter_user_id = callback.from_user.id
+            referral_link = referral_service.generate_referral_link(bot_username, inviter_user_id)
+            
+            friend_message = _("referral_friend_message", referral_link=referral_link)
+            
+            await callback.message.answer(
+                friend_message,
+                disable_web_page_preview=True
+            )
+            
+        except Exception as e:
+            logging.error(f"Error in referral share message: {e}")
+            await callback.answer("Произошла ошибка", show_alert=True)
+        
+    await callback.answer()

@@ -7,7 +7,13 @@ class AdminStates(StatesGroup):
     confirming_broadcast = State()
     waiting_for_promo_details = State()
     waiting_for_promo_edit_details = State()
+    waiting_for_bulk_promo_details = State()
     waiting_for_user_id_to_ban = State()
     waiting_for_user_id_to_unban = State()
 
     waiting_for_user_id_for_logs = State()
+    
+    # User management states
+    waiting_for_user_search = State()
+    waiting_for_subscription_days_to_add = State()
+    waiting_for_direct_message_to_user = State()

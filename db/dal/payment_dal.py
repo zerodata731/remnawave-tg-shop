@@ -155,3 +155,67 @@ async def update_provider_payment_and_status(
             f"Payment record with DB ID {payment_db_id} not found for provider update."
         )
     return payment
+
+
+async def get_financial_statistics(session: AsyncSession) -> Dict[str, Any]:
+    """Get comprehensive financial statistics."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import and_, text
+    
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=7)
+    month_start = today_start - timedelta(days=30)
+    
+    # Today's revenue
+    stmt_today = select(func.sum(Payment.amount)).where(
+        and_(
+            Payment.status == 'succeeded',
+            Payment.created_at >= today_start
+        )
+    )
+    today_revenue = await session.execute(stmt_today)
+    today_amount = today_revenue.scalar() or 0
+    
+    # Week revenue
+    stmt_week = select(func.sum(Payment.amount)).where(
+        and_(
+            Payment.status == 'succeeded',
+            Payment.created_at >= week_start
+        )
+    )
+    week_revenue = await session.execute(stmt_week)
+    week_amount = week_revenue.scalar() or 0
+    
+    # Month revenue
+    stmt_month = select(func.sum(Payment.amount)).where(
+        and_(
+            Payment.status == 'succeeded',
+            Payment.created_at >= month_start
+        )
+    )
+    month_revenue = await session.execute(stmt_month)
+    month_amount = month_revenue.scalar() or 0
+    
+    # All time revenue
+    stmt_all = select(func.sum(Payment.amount)).where(Payment.status == 'succeeded')
+    all_revenue = await session.execute(stmt_all)
+    all_amount = all_revenue.scalar() or 0
+    
+    # Count of successful payments today
+    stmt_count_today = select(func.count(Payment.payment_id)).where(
+        and_(
+            Payment.status == 'succeeded',
+            Payment.created_at >= today_start
+        )
+    )
+    today_count = await session.execute(stmt_count_today)
+    today_payments_count = today_count.scalar() or 0
+    
+    return {
+        "today_revenue": float(today_amount),
+        "week_revenue": float(week_amount),
+        "month_revenue": float(month_amount),
+        "all_time_revenue": float(all_amount),
+        "today_payments_count": today_payments_count
+    }

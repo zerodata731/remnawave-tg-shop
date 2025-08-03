@@ -149,3 +149,70 @@ async def get_all_users_with_panel_uuid(session: AsyncSession) -> List[User]:
     stmt = select(User).where(User.panel_user_uuid.is_not(None))
     result = await session.execute(stmt)
     return result.scalars().all()
+
+
+async def get_enhanced_user_statistics(session: AsyncSession) -> Dict[str, Any]:
+    """Get comprehensive user statistics including active users, trial users, etc."""
+    from datetime import datetime, timedelta
+    
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Total users
+    total_users_stmt = select(func.count(User.user_id))
+    total_users = (await session.execute(total_users_stmt)).scalar() or 0
+    
+    # Banned users
+    banned_users_stmt = select(func.count(User.user_id)).where(User.is_banned == True)
+    banned_users = (await session.execute(banned_users_stmt)).scalar() or 0
+    
+    # Active users today (users with login activity - for now using registration as proxy)
+    active_today_stmt = select(func.count(User.user_id)).where(
+        User.registration_date >= today_start
+    )
+    active_today = (await session.execute(active_today_stmt)).scalar() or 0
+    
+    # Users with active paid subscriptions
+    paid_subs_stmt = (
+        select(func.count(func.distinct(Subscription.user_id)))
+        .join(User, Subscription.user_id == User.user_id)
+        .where(
+            and_(
+                Subscription.is_active == True,
+                Subscription.end_date > now,
+                Subscription.provider.is_not(None)  # Not trial
+            )
+        )
+    )
+    paid_subs_users = (await session.execute(paid_subs_stmt)).scalar() or 0
+    
+    # Users on trial period
+    trial_subs_stmt = (
+        select(func.count(func.distinct(Subscription.user_id)))
+        .join(User, Subscription.user_id == User.user_id)
+        .where(
+            and_(
+                Subscription.is_active == True,
+                Subscription.end_date > now,
+                Subscription.provider.is_(None)  # Trial subscriptions
+            )
+        )
+    )
+    trial_users = (await session.execute(trial_subs_stmt)).scalar() or 0
+    
+    # Inactive users (no active subscription)
+    inactive_users = total_users - paid_subs_users - trial_users - banned_users
+    
+    # Users attracted via referral
+    referral_users_stmt = select(func.count(User.user_id)).where(User.referred_by_id.is_not(None))
+    referral_users = (await session.execute(referral_users_stmt)).scalar() or 0
+    
+    return {
+        "total_users": total_users,
+        "banned_users": banned_users,
+        "active_today": active_today,
+        "paid_subscriptions": paid_subs_users,
+        "trial_users": trial_users,
+        "inactive_users": max(0, inactive_users),
+        "referral_users": referral_users
+    }

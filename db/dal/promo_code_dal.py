@@ -26,6 +26,13 @@ async def get_promo_code_by_id(session: AsyncSession,
     return await session.get(PromoCode, promo_code_id)
 
 
+async def get_promo_code_by_code(session: AsyncSession, code_str: str) -> Optional[PromoCode]:
+    """Get promo code by code string (regardless of active status)"""
+    stmt = select(PromoCode).where(PromoCode.code == code_str.upper())
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 async def get_active_promo_code_by_code_str(
         session: AsyncSession, code_str: str) -> Optional[PromoCode]:
     stmt = select(PromoCode).where(

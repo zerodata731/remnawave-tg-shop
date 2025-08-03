@@ -11,7 +11,7 @@ from db.models import PromoCode, User
 
 from .subscription_service import SubscriptionService
 from bot.middlewares.i18n import JsonI18n
-from .notification_service import notify_admin_promo_activation
+from .notification_service import notify_admin_promo_activation, NotificationService
 
 
 class PromoCodeService:
@@ -62,6 +62,20 @@ class PromoCodeService:
                 session, promo_data.promo_code_id)
 
             if activation_recorded and promo_incremented:
+                # Send notification about promo activation
+                try:
+                    notification_service = NotificationService(self.bot, self.settings, self.i18n)
+                    user = await user_dal.get_user_by_id(session, user_id)
+                    await notification_service.notify_promo_activation(
+                        user_id=user_id,
+                        promo_code=code_input_upper,
+                        bonus_days=bonus_days,
+                        username=user.username if user else None
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to send promo activation notification: {e}")
+                
+                # Legacy notification for backwards compatibility
                 await notify_admin_promo_activation(
                     self.bot,
                     self.settings,

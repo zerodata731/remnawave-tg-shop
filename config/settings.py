@@ -288,6 +288,16 @@ class Settings(BaseSettings):
         if self.REFERRAL_BONUS_DAYS_REFEREE_12_MONTHS is not None:
             bonuses[12] = self.REFERRAL_BONUS_DAYS_REFEREE_12_MONTHS
         return bonuses
+    
+    # Logging Configuration
+    LOG_CHAT_ID: Optional[int] = Field(default=None, description="Telegram chat/group ID for sending notifications")
+    LOG_THREAD_ID: Optional[int] = Field(default=None, description="Thread ID for supergroup messages (optional)")
+    
+    # Notification types
+    LOG_NEW_USERS: bool = Field(default=True, description="Send notifications for new user registrations")
+    LOG_PAYMENTS: bool = Field(default=True, description="Send notifications for successful payments")
+    LOG_PROMO_ACTIVATIONS: bool = Field(default=True, description="Send notifications for promo code activations")
+    LOG_TRIAL_ACTIVATIONS: bool = Field(default=True, description="Send notifications for trial activations")
 
     model_config = SettingsConfigDict(env_file='.env',
                                       env_file_encoding='utf-8',

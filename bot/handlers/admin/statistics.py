@@ -29,13 +29,52 @@ async def show_statistics_handler(callback: types.CallbackQuery,
 
     stats_text_parts = [f"<b>{_('admin_stats_header')}</b>"]
 
-    user_stats_dict = await user_dal.get_user_count_stats_dal(session)
+    # Enhanced user statistics
+    user_stats = await user_dal.get_enhanced_user_statistics(session)
+    
     stats_text_parts.append(
-        _("admin_stats_users",
-          total_users=user_stats_dict.get("total_users", 0),
-          banned_users=user_stats_dict.get("banned_users", 0),
-          active_subs=user_stats_dict.get("users_with_active_subscriptions",
-                                          0)))
+        f"\n<b>👥 {_('admin_enhanced_users_stats_header', default='Пользователи')}</b>"
+    )
+    stats_text_parts.append(
+        f"📊 Всего: <b>{user_stats['total_users']}</b>"
+    )
+    stats_text_parts.append(
+        f"📈 Активных сегодня: <b>{user_stats['active_today']}</b>"
+    )
+    stats_text_parts.append(
+        f"💳 С платной подпиской: <b>{user_stats['paid_subscriptions']}</b>"
+    )
+    stats_text_parts.append(
+        f"🆓 На пробном периоде: <b>{user_stats['trial_users']}</b>"
+    )
+    stats_text_parts.append(
+        f"😴 Неактивных: <b>{user_stats['inactive_users']}</b>"
+    )
+    stats_text_parts.append(
+        f"🚫 Заблокированных: <b>{user_stats['banned_users']}</b>"
+    )
+    stats_text_parts.append(
+        f"🎁 Привлечено по реферальной программе: <b>{user_stats['referral_users']}</b>"
+    )
+    
+    # Financial statistics
+    financial_stats = await payment_dal.get_financial_statistics(session)
+    
+    stats_text_parts.append(
+        f"\n<b>💰 {_('admin_financial_stats_header', default='Финансовая статистика')}</b>"
+    )
+    stats_text_parts.append(
+        f"📅 За сегодня: <b>{financial_stats['today_revenue']:.2f} RUB</b> ({financial_stats['today_payments_count']} платежей)"
+    )
+    stats_text_parts.append(
+        f"📅 За неделю: <b>{financial_stats['week_revenue']:.2f} RUB</b>"
+    )
+    stats_text_parts.append(
+        f"📅 За месяц: <b>{financial_stats['month_revenue']:.2f} RUB</b>"
+    )
+    stats_text_parts.append(
+        f"🏆 За все время: <b>{financial_stats['all_time_revenue']:.2f} RUB</b>"
+    )
 
     last_payments_models: List[
         Payment] = await payment_dal.get_recent_payment_logs_with_user(session,

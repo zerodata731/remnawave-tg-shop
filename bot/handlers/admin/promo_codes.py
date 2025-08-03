@@ -1,4 +1,6 @@
 import logging
+import random
+import string
 from aiogram import Router, F, types, Bot
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
@@ -340,6 +342,7 @@ async def promo_delete_handler(callback: types.CallbackQuery, i18n_data: dict,
     StateFilter(
         AdminStates.waiting_for_promo_details,
         AdminStates.waiting_for_promo_edit_details,
+        AdminStates.waiting_for_bulk_promo_details,
     ),
 )
 async def cancel_promo_creation_state_to_menu(callback: types.CallbackQuery,
@@ -365,3 +368,219 @@ async def cancel_promo_creation_state_to_menu(callback: types.CallbackQuery,
 
     await callback.answer(_("admin_action_cancelled_default_alert"))
     await state.clear()
+
+
+async def create_bulk_promo_prompt_handler(callback: types.CallbackQuery,
+                                          state: FSMContext, i18n_data: dict,
+                                          settings: Settings,
+                                          session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error preparing bulk promo creation.",
+                              show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    prompt_text = _(
+        "admin_bulk_promo_create_prompt",
+        default="📦 Массовое создание промокодов\n\nВведите данные в формате:\n<количество> <бонусные_дни> <максимальное_использование> [дни_действия]\n\nПример: 50 7 100 30\n(создаст 50 промокодов на 7 дней с лимитом 100 активаций каждый, действующих 30 дней)",
+        example_format="50 7 100 30"
+    )
+
+    try:
+        await callback.message.edit_text(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n))
+    except Exception as e:
+        logging.warning(
+            f"Could not edit message for bulk promo prompt: {e}. Sending new.")
+        await callback.message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n))
+    await callback.answer()
+    await state.set_state(AdminStates.waiting_for_bulk_promo_details)
+
+
+def generate_unique_promo_code(length: int = 8) -> str:
+    """Generate a unique promotional code"""
+    characters = string.ascii_uppercase + string.digits
+    # Exclude confusing characters
+    characters = characters.replace('0', '').replace('O', '').replace('1', '').replace('I', '').replace('L', '')
+    return ''.join(random.choice(characters) for _ in range(length))
+
+
+@router.message(AdminStates.waiting_for_bulk_promo_details, F.text)
+async def process_bulk_promo_details_handler(message: types.Message,
+                                            state: FSMContext,
+                                            i18n_data: dict,
+                                            settings: Settings,
+                                            session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    if not message.text:
+        await message.answer(_("admin_promo_invalid_format"))
+        return
+
+    parts = message.text.strip().split()
+    if not (3 <= len(parts) <= 4):
+        await message.answer(_(
+            "admin_bulk_promo_invalid_format",
+            default="❌ Неверный формат. Используйте: <количество> <бонусные_дни> <максимальное_использование> [дни_действия]"
+        ))
+        return
+
+    try:
+        count = int(parts[0])
+        bonus_days = int(parts[1])
+        max_activations = int(parts[2])
+
+        if count <= 0 or count > 1000:
+            raise ValueError(_("admin_bulk_promo_invalid_count", default="Количество должно быть от 1 до 1000"))
+        
+        if bonus_days <= 0 or max_activations <= 0:
+            raise ValueError(_("admin_promo_invalid_bonus_or_activations"))
+
+        valid_until_date: Optional[datetime] = None
+        valid_until_str_display = _("admin_promo_valid_indefinitely")
+
+        if len(parts) == 4:
+            valid_days_from_now = int(parts[3])
+            if valid_days_from_now <= 0:
+                raise ValueError(_("admin_promo_invalid_validity_days"))
+            valid_until_date = datetime.now(
+                timezone.utc) + timedelta(days=valid_days_from_now)
+            valid_until_str_display = _(
+                "admin_promo_valid_until_display",
+                date=valid_until_date.strftime('%Y-%m-%d'))
+
+    except ValueError as e:
+        await message.answer(_(
+            "admin_bulk_promo_invalid_values",
+            default="❌ Неверные значения: {error}",
+            error=str(e)
+        ))
+        return
+    except Exception as e_parse:
+        logging.error(f"Error parsing bulk promo details '{message.text}': {e_parse}")
+        await message.answer(_("admin_promo_invalid_format_general"))
+        return
+
+    admin_id = message.from_user.id if message.from_user else 0
+
+    # Generate unique codes and create promo codes
+    created_codes = []
+    failed_codes = []
+    
+    await message.answer(_(
+        "admin_bulk_promo_creating",
+        default="🔄 Создаю {count} промокодов...",
+        count=count
+    ))
+
+    for i in range(count):
+        try:
+            # Generate unique code
+            attempts = 0
+            while attempts < 10:  # Max 10 attempts to generate unique code
+                code = generate_unique_promo_code()
+                
+                # Check if code already exists
+                existing_promo = await promo_code_dal.get_promo_code_by_code(session, code)
+                if not existing_promo:
+                    break
+                attempts += 1
+            
+            if attempts >= 10:
+                failed_codes.append(f"Failed to generate unique code #{i+1}")
+                continue
+
+            promo_data_to_create = {
+                "code": code,
+                "bonus_days": bonus_days,
+                "max_activations": max_activations,
+                "created_by_admin_id": admin_id,
+                "valid_until": valid_until_date,
+                "is_active": True,
+                "current_activations": 0
+            }
+
+            created_promo = await promo_code_dal.create_promo_code(
+                session, promo_data_to_create)
+            
+            if created_promo:
+                created_codes.append(created_promo.code)
+            else:
+                failed_codes.append(f"Failed to create code #{i+1}")
+
+        except Exception as e:
+            logging.error(f"Error creating bulk promo code #{i+1}: {e}")
+            failed_codes.append(f"Error creating code #{i+1}: {str(e)}")
+
+    try:
+        await session.commit()
+        
+        # Prepare success message
+        success_text_parts = [
+            _(
+                "admin_bulk_promo_created_success",
+                default="✅ Массовое создание завершено!\n\n📦 Создано промокодов: {created_count}\n💎 Бонусных дней: {bonus_days}\n🔄 Макс. активаций каждого: {max_activations}\n⏰ Действительны до: {valid_until}",
+                created_count=len(created_codes),
+                bonus_days=bonus_days,
+                max_activations=max_activations,
+                valid_until=valid_until_str_display
+            )
+        ]
+
+        if failed_codes:
+            success_text_parts.append(f"\n❌ Ошибок: {len(failed_codes)}")
+
+        if created_codes:
+            # Show first few codes as examples
+            codes_to_show = created_codes[:10]  # Show first 10
+            success_text_parts.append(f"\n📝 Примеры созданных кодов:")
+            success_text_parts.append("\n".join([f"• {code}" for code in codes_to_show]))
+            
+            if len(created_codes) > 10:
+                success_text_parts.append(f"... и еще {len(created_codes) - 10} кодов")
+
+        # Send codes as a file if many were created
+        if len(created_codes) > 20:
+            try:
+                codes_text = "\n".join(created_codes)
+                codes_file = types.BufferedInputFile(
+                    codes_text.encode('utf-8'),
+                    filename=f"promo_codes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+                )
+                await message.answer_document(
+                    codes_file,
+                    caption=_(
+                        "admin_bulk_promo_codes_file",
+                        default="📄 Файл со всеми созданными промокодами"
+                    )
+                )
+            except Exception as e:
+                logging.error(f"Failed to send codes file: {e}")
+
+        final_text = "\n".join(success_text_parts)
+        await message.answer(
+            final_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n))
+
+    except Exception as e_db_commit:
+        await session.rollback()
+        logging.error(f"Failed to commit bulk promo codes creation: {e_db_commit}", exc_info=True)
+        await message.answer(_(
+            "admin_bulk_promo_creation_failed",
+            default="❌ Ошибка при сохранении промокодов в базу данных"
+        ))
+
+    await state.clear()
+
+
+
