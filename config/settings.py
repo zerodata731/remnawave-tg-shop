@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     SUBSCRIPTION_MINI_APP_URL: Optional[str] = Field(default=None)
 
     START_COMMAND_DESCRIPTION: Optional[str] = Field(default=None)
+    
+    # Inline mode thumbnail URLs
+    INLINE_REFERRAL_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/1077/1077114.png")
+    INLINE_USER_STATS_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/681/681494.png")
+    INLINE_FINANCIAL_STATS_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/2769/2769339.png")
+    INLINE_SYSTEM_STATS_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/2920/2920277.png")
 
     @computed_field
     @property

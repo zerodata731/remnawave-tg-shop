@@ -38,7 +38,7 @@ async def inline_query_handler(inline_query: InlineQuery,
         # For all users: referral functionality
         if not query or "реф" in query or "ref" in query or "друг" in query or "friend" in query:
             referral_result = await create_referral_result(
-                inline_query, bot, referral_service, i18n, current_lang
+                inline_query, bot, referral_service, i18n, current_lang, settings
             )
             if referral_result:
                 results.append(referral_result)
@@ -46,14 +46,11 @@ async def inline_query_handler(inline_query: InlineQuery,
         # For admins: statistics
         if is_admin and (not query or "стат" in query or "stat" in query or "админ" in query or "admin" in query):
             stats_results = await create_admin_stats_results(
-                session, i18n, current_lang
+                session, i18n, current_lang, settings
             )
             results.extend(stats_results)
         
-        # Show help if no specific query
-        if not query:
-            help_result = await create_help_result(i18n, current_lang, is_admin)
-            results.append(help_result)
+
         
         # Limit results to 50 (Telegram limit)
         results = results[:50]
@@ -72,7 +69,7 @@ async def inline_query_handler(inline_query: InlineQuery,
 
 async def create_referral_result(inline_query: InlineQuery, bot: Bot,
                                 referral_service: ReferralService,
-                                i18n_instance, lang: str) -> Optional[InlineQueryResultArticle]:
+                                i18n_instance, lang: str, settings: Settings) -> Optional[InlineQueryResultArticle]:
     """Create referral link result for inline query"""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     
@@ -110,7 +107,7 @@ async def create_referral_result(inline_query: InlineQuery, bot: Bot,
                 message_text=message_text,
                 disable_web_page_preview=True
             ),
-            thumbnail_url="https://cdn-icons-png.flaticon.com/512/1077/1077114.png"
+            thumbnail_url=settings.INLINE_REFERRAL_THUMBNAIL_URL
         )
         
     except Exception as e:
@@ -118,24 +115,24 @@ async def create_referral_result(inline_query: InlineQuery, bot: Bot,
         return None
 
 
-async def create_admin_stats_results(session: AsyncSession, i18n_instance, lang: str) -> List[InlineQueryResultArticle]:
+async def create_admin_stats_results(session: AsyncSession, i18n_instance, lang: str, settings: Settings) -> List[InlineQueryResultArticle]:
     """Create admin statistics results for inline query"""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     results = []
     
     try:
         # Quick user stats
-        user_stats_result = await create_user_stats_result(session, i18n_instance, lang)
+        user_stats_result = await create_user_stats_result(session, i18n_instance, lang, settings)
         if user_stats_result:
             results.append(user_stats_result)
         
         # Quick financial stats
-        financial_stats_result = await create_financial_stats_result(session, i18n_instance, lang)
+        financial_stats_result = await create_financial_stats_result(session, i18n_instance, lang, settings)
         if financial_stats_result:
             results.append(financial_stats_result)
         
         # Quick system stats
-        system_stats_result = await create_system_stats_result(session, i18n_instance, lang)
+        system_stats_result = await create_system_stats_result(session, i18n_instance, lang, settings)
         if system_stats_result:
             results.append(system_stats_result)
             
@@ -145,7 +142,7 @@ async def create_admin_stats_results(session: AsyncSession, i18n_instance, lang:
     return results
 
 
-async def create_user_stats_result(session: AsyncSession, i18n_instance, lang: str) -> Optional[InlineQueryResultArticle]:
+async def create_user_stats_result(session: AsyncSession, i18n_instance, lang: str, settings: Settings) -> Optional[InlineQueryResultArticle]:
     """Create user statistics result"""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     
@@ -188,7 +185,7 @@ async def create_user_stats_result(session: AsyncSession, i18n_instance, lang: s
                 message_text=stats_text,
                 parse_mode="HTML"
             ),
-            thumbnail_url="https://cdn-icons-png.flaticon.com/512/681/681494.png"
+            thumbnail_url=settings.INLINE_USER_STATS_THUMBNAIL_URL
         )
         
     except Exception as e:
@@ -196,7 +193,7 @@ async def create_user_stats_result(session: AsyncSession, i18n_instance, lang: s
         return None
 
 
-async def create_financial_stats_result(session: AsyncSession, i18n_instance, lang: str) -> Optional[InlineQueryResultArticle]:
+async def create_financial_stats_result(session: AsyncSession, i18n_instance, lang: str, settings: Settings) -> Optional[InlineQueryResultArticle]:
     """Create financial statistics result"""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     
@@ -234,7 +231,7 @@ async def create_financial_stats_result(session: AsyncSession, i18n_instance, la
                 message_text=stats_text,
                 parse_mode="HTML"
             ),
-            thumbnail_url="https://cdn-icons-png.flaticon.com/512/2769/2769339.png"
+            thumbnail_url=settings.INLINE_FINANCIAL_STATS_THUMBNAIL_URL
         )
         
     except Exception as e:
@@ -242,7 +239,7 @@ async def create_financial_stats_result(session: AsyncSession, i18n_instance, la
         return None
 
 
-async def create_system_stats_result(session: AsyncSession, i18n_instance, lang: str) -> Optional[InlineQueryResultArticle]:
+async def create_system_stats_result(session: AsyncSession, i18n_instance, lang: str, settings: Settings) -> Optional[InlineQueryResultArticle]:
     """Create system statistics result with online/offline/expired/limited info"""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     
@@ -307,7 +304,7 @@ async def create_system_stats_result(session: AsyncSession, i18n_instance, lang:
                 message_text=stats_text,
                 parse_mode="HTML"
             ),
-            thumbnail_url="https://cdn-icons-png.flaticon.com/512/2920/2920277.png"
+            thumbnail_url=settings.INLINE_SYSTEM_STATS_THUMBNAIL_URL
         )
         
     except Exception as e:
@@ -315,41 +312,3 @@ async def create_system_stats_result(session: AsyncSession, i18n_instance, lang:
         return None
 
 
-async def create_help_result(i18n_instance, lang: str, is_admin: bool) -> InlineQueryResultArticle:
-    """Create help result explaining inline mode features"""
-    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
-    
-    if is_admin:
-        help_text = _(
-            "inline_admin_help_message",
-            default="🤖 <b>Inline режим бота</b>\n\n"
-                   "📱 <b>Доступные команды:</b>\n\n"
-                   "🎁 <b>реф/ref</b> - поделиться реферальной ссылкой\n"
-                   "👥 <b>стат/stat</b> - статистика пользователей\n"
-                   "💰 <b>финансы</b> - финансовая статистика\n"
-                   "🖥 <b>система</b> - системная статистика\n\n"
-                   "💡 Просто напишите @{bot_username} и начните вводить команду в любом чате!"
-        )
-        title = _("inline_admin_help_title", default="🤖 Inline помощь (Админ)")
-        description = _("inline_admin_help_description", default="Доступны команды: реф, стат, финансы, система")
-    else:
-        help_text = _(
-            "inline_user_help_message", 
-            default="🤖 <b>Inline режим бота</b>\n\n"
-                   "📱 <b>Доступные команды:</b>\n\n"
-                   "🎁 <b>реф/ref</b> - поделиться реферальной ссылкой\n\n"
-                   "💡 Просто напишите @{bot_username} и начните вводить 'реф' в любом чате!"
-        )
-        title = _("inline_user_help_title", default="🤖 Inline помощь")
-        description = _("inline_user_help_description", default="Доступна команда: реф (реферальная ссылка)")
-    
-    return InlineQueryResultArticle(
-        id="help",
-        title=title,
-        description=description,
-        input_message_content=InputTextMessageContent(
-            message_text=help_text,
-            parse_mode="HTML"
-        ),
-        thumbnail_url="https://cdn-icons-png.flaticon.com/512/906/906794.png"
-    )

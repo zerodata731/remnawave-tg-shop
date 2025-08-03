@@ -70,58 +70,66 @@ async def show_statistics_handler(callback: types.CallbackQuery,
             
             if system_stats:
                 users = system_stats.get('users', {})
-                active_users = users.get('active', 0)
-                disabled_users = users.get('disabled', 0) 
-                expired_users = users.get('expired', 0)
-                limited_users = users.get('limited', 0)
-                total_users = users.get('total', 0)
+                status_counts = users.get('statusCounts', {})
+                online_stats = system_stats.get('onlineStats', {})
                 
-                stats_text_parts.append(f"🟢 {_('admin_panel_online_label', default='Онлайн')}: <b>{active_users}</b>")
-                stats_text_parts.append(f"🔴 {_('admin_panel_offline_label', default='Офлайн')}: <b>{disabled_users}</b>")
+                active_users = status_counts.get('ACTIVE', 0)
+                disabled_users = status_counts.get('DISABLED', 0) 
+                expired_users = status_counts.get('EXPIRED', 0)
+                limited_users = status_counts.get('LIMITED', 0)
+                total_users = users.get('totalUsers', 0)
+                online_now = online_stats.get('onlineNow', 0)
+                
+                stats_text_parts.append(f"🟢 {_('admin_panel_online_label', default='Онлайн')}: <b>{online_now}</b>")
+                stats_text_parts.append(f"📊 {_('admin_panel_active_label', default='Активных')}: <b>{active_users}</b>")
+                stats_text_parts.append(f"🔴 {_('admin_panel_disabled_label', default='Отключенных')}: <b>{disabled_users}</b>")
                 stats_text_parts.append(f"⏰ {_('admin_panel_expired_label', default='Истекшие')}: <b>{expired_users}</b>")
                 stats_text_parts.append(f"⚠️ {_('admin_panel_limited_label', default='Ограниченные')}: <b>{limited_users}</b>")
                 stats_text_parts.append(f"👥 {_('admin_panel_total_users_label', default='Всего пользователей')}: <b>{total_users}</b>")
                 
                 # System resources
-                cpu = system_stats.get('cpu', {})
                 memory = system_stats.get('memory', {})
-                if cpu:
-                    cpu_usage = cpu.get('usage', 0)
-                    stats_text_parts.append(f"🔄 {_('admin_panel_cpu_usage_label', default='Загрузка CPU')}: <b>{cpu_usage:.1f}%</b>")
                 if memory:
-                    memory_usage = memory.get('usage', 0)
+                    memory_total = memory.get('total', 1)
+                    memory_used = memory.get('used', 0)
+                    memory_usage = (memory_used / memory_total) * 100 if memory_total > 0 else 0
                     stats_text_parts.append(f"💾 {_('admin_panel_memory_usage_label', default='Использование RAM')}: <b>{memory_usage:.1f}%</b>")
             else:
                 stats_text_parts.append(f"⚠️ {_('admin_panel_system_stats_error', default='Ошибка получения системной статистики')}")
             
             # Bandwidth stats
             if bandwidth_stats:
-                today_traffic = bandwidth_stats.get('bandwidthToday', {})
                 week_traffic = bandwidth_stats.get('bandwidthLastSevenDays', {})
-                month_traffic = bandwidth_stats.get('bandwidthLastThirtyDays', {})
-                
-                if today_traffic:
-                    today_total = today_traffic.get('total', '0 B')
-                    stats_text_parts.append(f"📊 {_('admin_panel_traffic_today_label', default='Трафик сегодня')}: <b>{today_total}</b>")
+                month_traffic = bandwidth_stats.get('bandwidthLast30Days', {})
+                # Fallback to the actual key name from API if the above doesn't exist
+                if not month_traffic:
+                    month_traffic = bandwidth_stats.get('bandwidthLastThirtyDays', {})
                 
                 if week_traffic:
-                    week_total = week_traffic.get('total', '0 B')
+                    week_total = week_traffic.get('current', '0 B')
                     stats_text_parts.append(f"📊 {_('admin_panel_traffic_week_label', default='Трафик за неделю')}: <b>{week_total}</b>")
                     
                 if month_traffic:
-                    month_total = month_traffic.get('total', '0 B')
+                    month_total = month_traffic.get('current', '0 B')
                     stats_text_parts.append(f"📊 {_('admin_panel_traffic_month_label', default='Трафик за месяц')}: <b>{month_total}</b>")
             else:
                 stats_text_parts.append(f"⚠️ {_('admin_panel_bandwidth_stats_error', default='Ошибка получения статистики трафика')}")
             
-            # Nodes stats
-            if nodes_stats:
+            # Nodes stats  
+            if nodes_stats and 'lastSevenDays' in nodes_stats:
                 last_seven_days = nodes_stats.get('lastSevenDays', [])
-                active_nodes_count = len([node for node in last_seven_days if node.get('status') == 'active'])
-                total_nodes_count = len(last_seven_days)
-                stats_text_parts.append(f"🔗 {_('admin_panel_nodes_label', default='Активных нод')}: <b>{active_nodes_count}/{total_nodes_count}</b>")
+                # Get unique node names from the data
+                unique_nodes = set()
+                for node_data in last_seven_days:
+                    unique_nodes.add(node_data.get('nodeName', ''))
+                total_nodes_count = len(unique_nodes)
+                # Assume all nodes are active since we don't have status info
+                stats_text_parts.append(f"🔗 {_('admin_panel_nodes_label', default='Активных нод')}: <b>{total_nodes_count}/{total_nodes_count}</b>")
             else:
-                stats_text_parts.append(f"⚠️ {_('admin_panel_nodes_stats_error', default='Ошибка получения статистики нод')}")
+                # Use nodes total from system stats as fallback
+                nodes_info = system_stats.get('nodes', {}) if system_stats else {}
+                total_online = nodes_info.get('totalOnline', 0)
+                stats_text_parts.append(f"🔗 {_('admin_panel_nodes_label', default='Активных нод')}: <b>{total_online}</b>")
                 
     except Exception as e:
         logging.error(f"Failed to fetch panel statistics: {e}", exc_info=True)
