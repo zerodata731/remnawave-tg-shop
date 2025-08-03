@@ -234,7 +234,7 @@
   "subscription_expired_yesterday_notification": "👋 Привет, {user_name}!\n\n⏳ Ваша подписка на VPN истекла сутки назад ({end_date}).\n\nПродлите её по кнопке ниже.",
 
   "admin_new_trial_notification": "\ud83c\udf21 Пользователь {user_id} активировал пробный период до {end_date}.",
-  "admin_new_payment_notification": "\ud83d\udcb3 Получен платеж от пользователя {user_id}: {months} мес. за {amount} {currency}.",
+
   "admin_promo_activation_notification": "\ud83c\udf81 Пользователь {user_id} активировал промокод {code} (+{bonus_days} дн.)",
 
   "error_unknown": "Произошла неизвестная ошибка.",
@@ -362,5 +362,41 @@
   "admin_promo_creation_failed": "❌ Ошибка создания промокода: {error}",
   
   "admin_panel_back_button": "⬅️ Назад",
-  "admin_bulk_promo_creation_failed": "❌ Ошибка создания промокодов: {error}"
+  "admin_bulk_promo_creation_failed": "❌ Ошибка создания промокодов: {error}",
+  
+  "admin_user_id_label": "🆔 <b>ID:</b>",
+  "admin_user_name_label": "👤 <b>Имя:</b>",
+  "admin_user_username_label": "📱 <b>Username:</b>",
+  "admin_user_language_label": "🌍 <b>Язык:</b>",
+  "admin_user_registration_label": "📅 <b>Регистрация:</b>",
+  "admin_user_status_label": "🛡 <b>Статус:</b>",
+  "admin_user_referral_label": "🎁 <b>Привлечен по реферальной программе от:</b>",
+  "admin_user_panel_uuid_label": "🔗 <b>Panel UUID:</b>",
+  "admin_user_panel_status_label": "📊 <b>Статус на панели:</b>",
+  "admin_user_traffic_label": "📊 <b>Трафик:</b>",
+  "admin_user_subscription_label": "💼 <b>Подписка:</b>",
+  "admin_user_trial_label": "🏡 <b>Триал:</b>",
+  
+  "admin_user_status_banned": "🚫 Заблокирован",
+  "admin_user_status_active": "✅ Активен",
+  "admin_user_trial_used": "Использовал",
+  "admin_user_trial_not_used": "Не использовал",
+  "admin_user_ban_action_banned": "заблокирован",
+  "admin_user_ban_action_unbanned": "разблокирован",
+  "admin_user_na_value": "N/A",
+  
+  "admin_user_subscription_active": "Активна до {end_date}",
+  "admin_user_subscription_expired": "Истекла {end_date}",
+  "admin_user_subscription_none": "Нет активной подписки",
+  
+  "admin_user_logs_title": "📋 <b>Логи пользователя {user_id}</b>",
+  "admin_user_logs_empty": "Логи отсутствуют",
+  "admin_user_logs_count": "Всего записей: {count}",
+  "admin_user_logs_entry": "📅 {timestamp}\n📝 {event_type}: {content}",
+  
+  "admin_user_actions_count_label": "📜 <b>Всего действий:</b>",
+  "admin_user_subscription_active_until": "⏰ <b>Действует до:</b>",
+  "admin_user_subscription_error": "Ошибка загрузки",
+  
+  "admin_bulk_promo_unique_generation_failed": "Не удалось создать уникальный промокод"
 }

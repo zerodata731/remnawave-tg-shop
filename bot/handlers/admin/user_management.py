@@ -113,27 +113,28 @@ async def format_user_card(user: User, session: AsyncSession,
     card_parts.append(f"👤 <b>{_('admin_user_card_title', default='Карточка пользователя')}</b>\n")
     
     # User details
-    user_name = user.first_name or "N/A"
-    username_display = f"@{user.username}" if user.username else "N/A"
-    registration_date = user.registration_date.strftime('%Y-%m-%d %H:%M') if user.registration_date else "N/A"
+    na_value = _("admin_user_na_value", default="N/A")
+    user_name = user.first_name or na_value
+    username_display = f"@{user.username}" if user.username else na_value
+    registration_date = user.registration_date.strftime('%Y-%m-%d %H:%M') if user.registration_date else na_value
     
-    card_parts.append(f"🆔 <b>ID:</b> {hcode(str(user.user_id))}")
-    card_parts.append(f"👤 <b>Имя:</b> {hcode(user_name)}")
-    card_parts.append(f"📱 <b>Username:</b> {hcode(username_display)}")
-    card_parts.append(f"🌍 <b>Язык:</b> {hcode(user.language_code or 'N/A')}")
-    card_parts.append(f"📅 <b>Регистрация:</b> {hcode(registration_date)}")
+    card_parts.append(f"{_('admin_user_id_label', default='🆔 <b>ID:</b>')} {hcode(str(user.user_id))}")
+    card_parts.append(f"{_('admin_user_name_label', default='👤 <b>Имя:</b>')} {hcode(user_name)}")
+    card_parts.append(f"{_('admin_user_username_label', default='📱 <b>Username:</b>')} {hcode(username_display)}")
+    card_parts.append(f"{_('admin_user_language_label', default='🌍 <b>Язык:</b>')} {hcode(user.language_code or na_value)}")
+    card_parts.append(f"{_('admin_user_registration_label', default='📅 <b>Регистрация:</b>')} {hcode(registration_date)}")
     
     # Ban status
-    ban_status = "🚫 Заблокирован" if user.is_banned else "✅ Активен"
-    card_parts.append(f"🛡 <b>Статус:</b> {ban_status}")
+    ban_status = _("admin_user_status_banned", default="🚫 Заблокирован") if user.is_banned else _("admin_user_status_active", default="✅ Активен")
+    card_parts.append(f"{_('admin_user_status_label', default='🛡 <b>Статус:</b>')} {ban_status}")
     
     # Referral info
     if user.referred_by_id:
-        card_parts.append(f"🎁 <b>Привлечен по реферальной программе от:</b> {hcode(str(user.referred_by_id))}")
+        card_parts.append(f"{_('admin_user_referral_label', default='🎁 <b>Привлечен по реферальной программе от:</b>')} {hcode(str(user.referred_by_id))}")
     
     # Panel info
     if user.panel_user_uuid:
-        card_parts.append(f"🔗 <b>Panel UUID:</b> {hcode(user.panel_user_uuid[:8] + '...' if len(user.panel_user_uuid) > 8 else user.panel_user_uuid)}")
+        card_parts.append(f"{_('admin_user_panel_uuid_label', default='🔗 <b>Panel UUID:</b>')} {hcode(user.panel_user_uuid[:8] + '...' if len(user.panel_user_uuid) > 8 else user.panel_user_uuid)}")
     
     card_parts.append("")  # Empty line
     
@@ -146,33 +147,33 @@ async def format_user_card(user: User, session: AsyncSession,
             end_date = subscription_details.get('end_date')
             if end_date:
                 end_date_str = end_date.strftime('%Y-%m-%d %H:%M') if isinstance(end_date, datetime) else str(end_date)
-                card_parts.append(f"⏰ <b>Действует до:</b> {hcode(end_date_str)}")
+                card_parts.append(f"{_('admin_user_subscription_active_until', default='⏰ <b>Действует до:</b>')} {hcode(end_date_str)}")
             
             status = subscription_details.get('status_from_panel', 'UNKNOWN')
-            card_parts.append(f"📊 <b>Статус на панели:</b> {hcode(status)}")
+            card_parts.append(f"{_('admin_user_panel_status_label', default='📊 <b>Статус на панели:</b>')} {hcode(status)}")
             
             traffic_limit = subscription_details.get('traffic_limit_bytes')
             traffic_used = subscription_details.get('traffic_used_bytes')
             if traffic_limit and traffic_used is not None:
                 traffic_limit_gb = traffic_limit / (1024**3)
                 traffic_used_gb = traffic_used / (1024**3)
-                card_parts.append(f"📊 <b>Трафик:</b> {hcode(f'{traffic_used_gb:.2f}GB / {traffic_limit_gb:.2f}GB')}")
+                card_parts.append(f"{_('admin_user_traffic_label', default='📊 <b>Трафик:</b>')} {hcode(f'{traffic_used_gb:.2f}GB / {traffic_limit_gb:.2f}GB')}")
         else:
-            card_parts.append(f"💳 <b>Подписка:</b> {hcode('Отсутствует')}")
+            card_parts.append(f"{_('admin_user_subscription_label', default='💼 <b>Подписка:</b>')} {hcode(_('admin_user_subscription_none', default='Нет активной подписки'))}")
     except Exception as e:
         logging.error(f"Error getting subscription details for user {user.user_id}: {e}")
-        card_parts.append(f"💳 <b>Подписка:</b> {hcode('Ошибка загрузки')}")
+        card_parts.append(f"{_('admin_user_subscription_label', default='💼 <b>Подписка:</b>')} {hcode(_('admin_user_subscription_error', default='Ошибка загрузки'))}")
     
     # Statistics
     try:
         # Count user logs
         logs_count = await message_log_dal.count_user_message_logs(session, user.user_id)
-        card_parts.append(f"📜 <b>Всего действий:</b> {hcode(str(logs_count))}")
+        card_parts.append(f"{_('admin_user_actions_count_label', default='📜 <b>Всего действий:</b>')} {hcode(str(logs_count))}")
         
         # Check if user had any subscriptions
         had_subscriptions = await subscription_service.has_had_any_subscription(session, user.user_id)
-        trial_status = "Использовал" if had_subscriptions else "Не использовал"
-        card_parts.append(f"🆓 <b>Триал:</b> {hcode(trial_status)}")
+        trial_status = _("admin_user_trial_used", default="Использовал") if had_subscriptions else _("admin_user_trial_not_used", default="Не использовал")
+        card_parts.append(f"{_('admin_user_trial_label', default='🏡 <b>Триал:</b>')} {hcode(trial_status)}")
         
     except Exception as e:
         logging.error(f"Error getting user statistics for {user.user_id}: {e}")
@@ -353,7 +354,7 @@ async def handle_toggle_ban(callback: types.CallbackQuery, user: User,
         
         await session.commit()
         
-        status_text = "заблокирован" if new_ban_status else "разблокирован"
+        status_text = _("admin_user_ban_action_banned", default="заблокирован") if new_ban_status else _("admin_user_ban_action_unbanned", default="разблокирован")
         await callback.answer(_(
             "admin_user_ban_toggle_success",
             default="✅ Пользователь {status}",
@@ -365,9 +366,9 @@ async def handle_toggle_ban(callback: types.CallbackQuery, user: User,
         from config.settings import Settings
         from bot.services.panel_api_service import PanelApiService
         settings = Settings()
-        panel_service = PanelApiService(settings)
-        subscription_service = SubscriptionService(settings, panel_service)
-        await handle_refresh_user_card(callback, user, subscription_service, session, i18n_instance, lang)
+        async with PanelApiService(settings) as panel_service:
+            subscription_service = SubscriptionService(settings, panel_service)
+            await handle_refresh_user_card(callback, user, subscription_service, session, i18n_instance, lang)
         
     except Exception as e:
         logging.error(f"Error toggling ban for user {user.user_id}: {e}")
@@ -631,16 +632,16 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
         
         # Show user card again  
         from bot.services.panel_api_service import PanelApiService
-        panel_service = PanelApiService(settings)
-        subscription_service = SubscriptionService(settings, panel_service)
-        user_card_text = await format_user_card(target_user, session, subscription_service, i18n, current_lang)
-        keyboard = get_user_card_keyboard(target_user.user_id, i18n, current_lang)
-        
-        await message.answer(
-            user_card_text,
-            reply_markup=keyboard.as_markup(),
-            parse_mode="HTML"
-        )
+        async with PanelApiService(settings) as panel_service:
+            subscription_service = SubscriptionService(settings, panel_service)
+            user_card_text = await format_user_card(target_user, session, subscription_service, i18n, current_lang)
+            keyboard = get_user_card_keyboard(target_user.user_id, i18n, current_lang)
+            
+            await message.answer(
+                user_card_text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode="HTML"
+            )
         
     except Exception as e:
         logging.error(f"Error sending direct message to user {target_user_id}: {e}")

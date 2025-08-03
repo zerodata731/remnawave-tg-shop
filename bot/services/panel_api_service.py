@@ -21,6 +21,14 @@ class PanelApiService:
         self.api_key = settings.PANEL_API_KEY
         self._session: Optional[aiohttp.ClientSession] = None
         self.default_client_ip = "127.0.0.1"
+    
+    async def __aenter__(self):
+        """Context manager entry"""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - automatically close session"""
+        await self.close_session()
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -32,7 +40,7 @@ class PanelApiService:
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
-            logging.info("Panel API service HTTP session closed.")
+            logging.debug("Panel API service HTTP session closed.")
 
     async def close(self):
         """Alias for close_session for API consistency."""

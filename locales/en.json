@@ -234,7 +234,7 @@
   "subscription_expired_yesterday_notification": "👋 Hi, {user_name}!\n\n⏳ Your VPN subscription expired yesterday ({end_date}).\n\nPlease renew it using the button below.",
 
   "admin_new_trial_notification": "\ud83c\udf21 User {user_id} activated a free trial until {end_date}.",
-  "admin_new_payment_notification": "\ud83d\udcb3 Payment received from user {user_id}: {months} mo. for {amount} {currency}.",
+
   "admin_promo_activation_notification": "\ud83c\udf81 Promo code {code} activated by user {user_id} (+{bonus_days}d).",
 
   "error_unknown": "An unknown error occurred.",
@@ -362,5 +362,41 @@
   "admin_promo_creation_failed": "❌ Error creating promo code: {error}",
   
   "admin_panel_back_button": "⬅️ Back",
-  "admin_bulk_promo_creation_failed": "❌ Error creating promo codes: {error}"
+  "admin_bulk_promo_creation_failed": "❌ Error creating promo codes: {error}",
+  
+  "admin_user_id_label": "🆔 <b>ID:</b>",
+  "admin_user_name_label": "👤 <b>Name:</b>",
+  "admin_user_username_label": "📱 <b>Username:</b>",
+  "admin_user_language_label": "🌍 <b>Language:</b>",
+  "admin_user_registration_label": "📅 <b>Registration:</b>",
+  "admin_user_status_label": "🛡 <b>Status:</b>",
+  "admin_user_referral_label": "🎁 <b>Referred by:</b>",
+  "admin_user_panel_uuid_label": "🔗 <b>Panel UUID:</b>",
+  "admin_user_panel_status_label": "📊 <b>Panel Status:</b>",
+  "admin_user_traffic_label": "📊 <b>Traffic:</b>",
+  "admin_user_subscription_label": "💼 <b>Subscription:</b>",
+  "admin_user_trial_label": "🏡 <b>Trial:</b>",
+  
+  "admin_user_status_banned": "🚫 Banned",
+  "admin_user_status_active": "✅ Active",
+  "admin_user_trial_used": "Used",
+  "admin_user_trial_not_used": "Not used",
+  "admin_user_ban_action_banned": "banned",
+  "admin_user_ban_action_unbanned": "unbanned",
+  "admin_user_na_value": "N/A",
+  
+  "admin_user_subscription_active": "Active until {end_date}",
+  "admin_user_subscription_expired": "Expired {end_date}",
+  "admin_user_subscription_none": "No active subscription",
+  
+  "admin_user_logs_title": "📋 <b>User logs {user_id}</b>",
+  "admin_user_logs_empty": "No logs available",
+  "admin_user_logs_count": "Total entries: {count}",
+  "admin_user_logs_entry": "📅 {timestamp}\n📝 {event_type}: {content}",
+  
+  "admin_user_actions_count_label": "📜 <b>Total actions:</b>",
+  "admin_user_subscription_active_until": "⏰ <b>Active until:</b>",
+  "admin_user_subscription_error": "Loading error",
+  
+  "admin_bulk_promo_unique_generation_failed": "Failed to create unique promo code"
 }

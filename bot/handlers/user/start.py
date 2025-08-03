@@ -237,7 +237,6 @@ async def start_command_handler(message: types.Message,
                 config_link = active.get("config_link") if active else None
                 config_link = config_link or _("config_link_not_available")
                 
-                from datetime import datetime
                 new_end_date = result if isinstance(result, datetime) else None
                 
                 promo_success_text = _(

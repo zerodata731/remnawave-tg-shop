@@ -14,7 +14,7 @@ from bot.middlewares.i18n import JsonI18n
 from bot.services.subscription_service import SubscriptionService
 from bot.services.referral_service import ReferralService
 from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
-from bot.services.notification_service import notify_admin_new_payment
+from bot.services.notification_service import NotificationService
 from db.dal import payment_dal, user_dal
 
 
@@ -194,15 +194,20 @@ class CryptoPayService:
             except Exception as e:
                 logging.error(f"Failed to send CryptoPay success message: {e}")
 
-            await notify_admin_new_payment(
-                bot,
-                settings,
-                i18n,
-                user_id,
-                months,
-                float(invoice.amount),
-                currency=invoice.asset or settings.DEFAULT_CURRENCY_SYMBOL,
-            )
+            # Send notification about payment
+            try:
+                notification_service = NotificationService(bot, settings, i18n)
+                user = await user_dal.get_user_by_id(session, user_id)
+                await notification_service.notify_payment_received(
+                    user_id=user_id,
+                    amount=float(invoice.amount),
+                    currency=invoice.asset or settings.DEFAULT_CURRENCY_SYMBOL,
+                    months=months,
+                    payment_provider="crypto_pay",
+                    username=user.username if user else None
+                )
+            except Exception as e:
+                logging.error(f"Failed to send crypto_pay payment notification: {e}")
 
     async def webhook_route(self, request: web.Request) -> web.Response:
         if not self.configured or not self.client:

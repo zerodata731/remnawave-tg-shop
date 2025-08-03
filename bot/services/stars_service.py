@@ -10,7 +10,7 @@ from db.dal import payment_dal, user_dal
 from .subscription_service import SubscriptionService
 from .referral_service import ReferralService
 from bot.middlewares.i18n import JsonI18n
-from .notification_service import notify_admin_new_payment
+from .notification_service import NotificationService
 from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
 
 
@@ -153,13 +153,18 @@ class StarsService:
             logging.error(
                 f"Failed to send stars payment success message: {e_send}")
 
-        await notify_admin_new_payment(
-            self.bot,
-            self.settings,
-            self.i18n,
-            message.from_user.id,
-            months,
-            float(stars_amount),
-            currency="XTR",
-        )
+        # Send notification about payment
+        try:
+            notification_service = NotificationService(self.bot, self.settings, self.i18n)
+            user = await user_dal.get_user_by_id(session, message.from_user.id)
+            await notification_service.notify_payment_received(
+                user_id=message.from_user.id,
+                amount=float(stars_amount),
+                currency="XTR",
+                months=months,
+                payment_provider="stars",
+                username=user.username if user else None
+            )
+        except Exception as e:
+            logging.error(f"Failed to send stars payment notification: {e}")
 

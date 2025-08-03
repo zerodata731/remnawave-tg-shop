@@ -13,7 +13,7 @@ from bot.middlewares.i18n import JsonI18n
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
 from bot.services.referral_service import ReferralService
-from .notification_service import notify_admin_new_payment
+from .notification_service import NotificationService
 from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
 from db.dal import payment_dal, user_dal, subscription_dal
 
@@ -187,15 +187,20 @@ class TributeService:
                         logging.error(
                             f"Failed to send Tribute payment success message to user {user_id}: {e}")
 
-                await notify_admin_new_payment(
-                    bot,
-                    settings,
-                    i18n,
-                    user_id,
-                    months,
-                    float(price_rub),
-                    currency="RUB",
-                )
+                # Send notification about payment
+                try:
+                    notification_service = NotificationService(bot, settings, i18n)
+                    user = await user_dal.get_user_by_id(session, user_id)
+                    await notification_service.notify_payment_received(
+                        user_id=user_id,
+                        amount=float(price_rub),
+                        currency="RUB",
+                        months=months,
+                        payment_provider="tribute",
+                        username=user.username if user else None
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to send tribute payment notification: {e}")
             else:
                 await session.commit()
         return web.Response(status=200, text="ok")

@@ -220,20 +220,7 @@ async def notify_admin_new_trial(bot: Bot, settings: Settings, i18n: JsonI18n,
     await notification_service.notify_trial_activation(user_id, end_date)
 
 
-async def notify_admin_new_payment(bot: Bot, settings: Settings, i18n: JsonI18n,
-                                   user_id: int, months: int, amount: float,
-                                   currency: str | None = None) -> None:
-    currency_symbol = currency or settings.DEFAULT_CURRENCY_SYMBOL
-    await notify_admins(
-        bot,
-        settings,
-        i18n,
-        "admin_new_payment_notification",
-        user_id=user_id,
-        months=months,
-        amount=f"{amount:.2f}",
-        currency=currency_symbol,
-    )
+
 
 
 async def notify_admin_promo_activation(bot: Bot, settings: Settings,

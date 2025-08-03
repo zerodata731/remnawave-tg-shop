@@ -266,7 +266,8 @@ async def process_promo_set_validity(callback: types.CallbackQuery,
 async def process_promo_validity_days_handler(message: types.Message,
                                              state: FSMContext,
                                              i18n_data: dict,
-                                             settings: Settings):
+                                             settings: Settings,
+                                             session: AsyncSession):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     if not i18n:
