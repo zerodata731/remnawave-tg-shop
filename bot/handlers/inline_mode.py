@@ -329,7 +329,9 @@ async def create_system_stats_result(session: AsyncSession, i18n_instance, lang:
             ),
             description=_(
                 "inline_system_description",
-                default="Панель: онлайн, ноды, трафик"
+                default="🟢 Онлайн: {online}, 📊 Активных: {active}",
+                online=online_now,
+                active=active_users
             ),
             input_message_content=InputTextMessageContent(
                 message_text=stats_text,

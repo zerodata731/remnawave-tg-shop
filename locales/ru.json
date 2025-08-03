@@ -453,7 +453,7 @@
   "inline_financial_title": "Финансовая статистика",
   "inline_financial_description": "Сегодня: {today} RUB",
   "inline_system_title": "Системная статистика",
-  "inline_system_description": "Онлайн: {online}, Офлайн: {offline}",
+  "inline_system_description": "🟢 Онлайн: {online}, 📊 Активных: {active}",
   "inline_admin_help_title": "Помощь по командам",
   "inline_admin_help_description": "Доступны команды: реф, стат, финансы, система",
   "inline_user_help_title": "Помощь по командам",

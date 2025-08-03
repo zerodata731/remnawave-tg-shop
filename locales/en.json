@@ -452,7 +452,7 @@
   "inline_financial_title": "Financial statistics",
   "inline_financial_description": "Today: {today} RUB",
   "inline_system_title": "System statistics", 
-  "inline_system_description": "Online: {online}, Offline: {offline}",
+  "inline_system_description": "🟢 Online: {online}, 📊 Active: {active}",
   "inline_admin_help_title": "Commands help",
   "inline_admin_help_description": "Available commands: ref, stat, financial, system",
   "inline_user_help_title": "Commands help",
