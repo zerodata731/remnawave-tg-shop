@@ -139,20 +139,27 @@ async def show_statistics_handler(callback: types.CallbackQuery,
         stats_text_parts.append(f"\n{_('admin_sync_status_never_run')}")
 
     # Panel Statistics
+    stats_text_parts.append(f"\n<b>🖥 {_('admin_panel_stats_header', default='Статистика панели')}</b>")
+    
     try:
         panel_service = PanelApiService(settings)
         
         # Get panel system statistics
+        logging.info("Fetching panel statistics...")
         panel_stats = await panel_service.get_panel_statistics()
         nodes_stats = await panel_service.get_nodes_statistics()
         online_count = await panel_service.get_online_users_count()
         users_activity = await panel_service.get_users_activity_stats()
         
-        stats_text_parts.append(f"\n<b>🖥 {_('admin_panel_stats_header', default='Статистика панели')}</b>")
+        logging.info(f"Panel stats response: panel_stats={panel_stats}, nodes_stats={nodes_stats}, online_count={online_count}, users_activity={users_activity}")
         
+        # Online users
         if online_count is not None:
             stats_text_parts.append(f"🟢 Онлайн сейчас: <b>{online_count}</b>")
+        else:
+            stats_text_parts.append(f"🟢 Онлайн сейчас: <b>N/A</b>")
         
+        # Users activity
         if users_activity:
             today_connected = users_activity.get('today_connected', 'N/A')
             week_connected = users_activity.get('week_connected', 'N/A')
@@ -160,12 +167,18 @@ async def show_statistics_handler(callback: types.CallbackQuery,
             stats_text_parts.append(f"📅 Подключались сегодня: <b>{today_connected}</b>")
             stats_text_parts.append(f"📅 Подключались за неделю: <b>{week_connected}</b>")
             stats_text_parts.append(f"❌ Никогда не подключались: <b>{never_connected}</b>")
+        else:
+            stats_text_parts.append(f"📅 Активность пользователей: <b>N/A</b>")
         
+        # Nodes statistics
         if nodes_stats:
             active_nodes = len([node for node in nodes_stats if node.get('status') == 'active'])
             total_nodes = len(nodes_stats)
             stats_text_parts.append(f"🔗 Активных нод: <b>{active_nodes}/{total_nodes}</b>")
+        else:
+            stats_text_parts.append(f"🔗 Ноды: <b>N/A</b>")
         
+        # System statistics
         if panel_stats:
             system_info = panel_stats.get('system', {})
             if system_info:
@@ -173,13 +186,17 @@ async def show_statistics_handler(callback: types.CallbackQuery,
                 cpu_usage = system_info.get('cpu_usage_percent', 'N/A')
                 stats_text_parts.append(f"💾 Использование RAM: <b>{memory_usage}%</b>")
                 stats_text_parts.append(f"🔄 Загрузка CPU: <b>{cpu_usage}%</b>")
+            else:
+                stats_text_parts.append(f"💾 Системная информация: <b>N/A</b>")
+        else:
+            stats_text_parts.append(f"💾 Системная статистика: <b>N/A</b>")
         
         await panel_service.close()
         
     except Exception as e:
-        logging.warning(f"Failed to fetch panel statistics: {e}")
-        stats_text_parts.append(f"\n<b>🖥 Статистика панели</b>")
-        stats_text_parts.append("❌ Не удалось получить данные с панели")
+        logging.error(f"Failed to fetch panel statistics: {e}", exc_info=True)
+        stats_text_parts.append("❌ Ошибка получения данных с панели")
+        stats_text_parts.append(f"⚠️ Детали: {str(e)}")
 
     final_text = "\n".join(stats_text_parts)
 

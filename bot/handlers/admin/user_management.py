@@ -363,8 +363,10 @@ async def handle_toggle_ban(callback: types.CallbackQuery, user: User,
         # Refresh user card with updated ban status
         user.is_banned = new_ban_status  # Update local object
         from config.settings import Settings
+        from bot.services.panel_api_service import PanelApiService
         settings = Settings()
-        subscription_service = SubscriptionService(settings)
+        panel_service = PanelApiService(settings)
+        subscription_service = SubscriptionService(settings, panel_service)
         await handle_refresh_user_card(callback, user, subscription_service, session, i18n_instance, lang)
         
     except Exception as e:
@@ -628,7 +630,9 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
         ))
         
         # Show user card again  
-        subscription_service = SubscriptionService(settings)
+        from bot.services.panel_api_service import PanelApiService
+        panel_service = PanelApiService(settings)
+        subscription_service = SubscriptionService(settings, panel_service)
         user_card_text = await format_user_card(target_user, session, subscription_service, i18n, current_lang)
         keyboard = get_user_card_keyboard(target_user.user_id, i18n, current_lang)
         
