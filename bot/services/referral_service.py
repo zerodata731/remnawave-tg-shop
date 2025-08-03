@@ -1,5 +1,6 @@
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from typing import Optional, Dict, Any
 from aiogram import Bot
 from datetime import datetime, timezone, timedelta
@@ -219,3 +220,39 @@ class ReferralService:
     def generate_referral_link(self, bot_username: str,
                                inviter_user_id: int) -> str:
         return f"https://t.me/{bot_username}?start=ref_{inviter_user_id}"
+
+    async def get_referral_stats(self, session: AsyncSession, user_id: int) -> dict:
+        """Get referral statistics for a user"""
+        from db.dal import user_dal, payment_dal
+        
+        try:
+            # Count total invited users (referrals)
+            invited_count_result = await session.execute(
+                text("SELECT COUNT(*) FROM users WHERE referred_by_id = :user_id"),
+                {"user_id": user_id}
+            )
+            invited_count = invited_count_result.scalar() or 0
+            
+            # Count users who made successful payments (purchased subscription)
+            purchased_count_result = await session.execute(
+                text("""
+                    SELECT COUNT(DISTINCT u.user_id) 
+                    FROM users u 
+                    JOIN payments p ON u.user_id = p.user_id 
+                    WHERE u.referred_by_id = :user_id 
+                    AND p.status = 'succeeded'
+                """),
+                {"user_id": user_id}
+            )
+            purchased_count = purchased_count_result.scalar() or 0
+            
+            return {
+                "invited_count": invited_count,
+                "purchased_count": purchased_count
+            }
+        except Exception as e:
+            logging.error(f"Error getting referral stats for user {user_id}: {e}")
+            return {
+                "invited_count": 0,
+                "purchased_count": 0
+            }

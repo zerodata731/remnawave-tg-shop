@@ -83,9 +83,14 @@ async def referral_command_handler(event: Union[types.Message,
     bonus_details_str = "\n".join(bonus_info_parts) if bonus_info_parts else _(
         "referral_no_bonuses_configured")
 
+    # Get referral statistics
+    referral_stats = await referral_service.get_referral_stats(session, inviter_user_id)
+
     text = _("referral_program_info_new",
              referral_link=referral_link,
-             bonus_details=bonus_details_str)
+             bonus_details=bonus_details_str,
+             invited_count=referral_stats["invited_count"],
+             purchased_count=referral_stats["purchased_count"])
 
     from bot.keyboards.inline.user_keyboards import get_referral_link_keyboard
     reply_markup_val = get_referral_link_keyboard(current_lang, i18n)
