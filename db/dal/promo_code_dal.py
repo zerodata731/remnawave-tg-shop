@@ -56,6 +56,33 @@ async def get_all_active_promo_codes(session: AsyncSession,
     return result.scalars().all()
 
 
+async def get_all_promo_codes_with_details(session: AsyncSession, limit: int = 50,
+                                         offset: int = 0) -> List[PromoCode]:
+    """Get all promo codes (active and inactive) with pagination for management"""
+    stmt = (select(PromoCode).order_by(
+        PromoCode.created_at.desc()).limit(limit).offset(offset))
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+async def get_promo_code_by_id(session: AsyncSession, promo_id: int) -> Optional[PromoCode]:
+    """Get promo code by ID"""
+    stmt = select(PromoCode).where(PromoCode.promo_code_id == promo_id)
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def get_promo_activations_by_code_id(session: AsyncSession, promo_code_id: int) -> List:
+    """Get activation history for a specific promo code"""
+    from db.models import PromoCodeActivation
+    stmt = (select(PromoCodeActivation)
+            .where(PromoCodeActivation.promo_code_id == promo_code_id)
+            .order_by(PromoCodeActivation.created_at.desc())
+            .limit(50))  # Limit to last 50 activations
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
 async def update_promo_code(session: AsyncSession, promo_id: int,
                             update_data: Dict[str, Any]) -> Optional[PromoCode]:
     promo = await get_promo_code_by_id(session, promo_id)

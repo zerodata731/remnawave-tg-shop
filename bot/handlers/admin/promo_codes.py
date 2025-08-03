@@ -465,10 +465,12 @@ async def view_promo_codes_handler(callback: types.CallbackQuery,
     await callback.answer()
 
 
-@router.callback_query(F.data == "admin_action:manage_promos")
-async def manage_promo_codes_handler(callback: types.CallbackQuery,
-                                     i18n_data: dict, settings: Settings,
-                                     session: AsyncSession):
+# New unified promo management system
+@router.callback_query(F.data == "admin_action:promo_management")
+async def promo_management_handler(callback: types.CallbackQuery,
+                                 i18n_data: dict, settings: Settings,
+                                 session: AsyncSession):
+    """Show list of all promo codes for management"""
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     if not i18n or not callback.message:
@@ -476,34 +478,166 @@ async def manage_promo_codes_handler(callback: types.CallbackQuery,
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    promo_models = await promo_code_dal.get_all_active_promo_codes(session,
-                                                                   limit=20,
-                                                                   offset=0)
+    # Get ALL promo codes (including inactive)
+    promo_models = await promo_code_dal.get_all_promo_codes_with_details(session, limit=50, offset=0)
     if not promo_models:
         await callback.message.edit_text(
-            _("admin_no_active_promos"),
+            _("admin_promo_management_empty", default="📭 Промокоды отсутствуют"),
             reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n))
         await callback.answer()
         return
 
     kb = InlineKeyboardBuilder()
     for promo in promo_models:
+        # Show promo code with status indicator
+        status_emoji = "✅" if promo.is_active else "🚫"
+        if promo.valid_until and promo.valid_until < datetime.now(timezone.utc):
+            status_emoji = "⏰"  # Expired
+        elif promo.current_activations >= promo.max_activations:
+            status_emoji = "🔄"  # Used up
+            
+        button_text = f"{status_emoji} {promo.code} ({promo.current_activations}/{promo.max_activations})"
         kb.row(
             InlineKeyboardButton(
-                text=promo.code,
-                callback_data=f"promo_edit:{promo.promo_code_id}"),
-            InlineKeyboardButton(
-                text=_("admin_promo_delete_button"),
-                callback_data=f"promo_delete:{promo.promo_code_id}"),
+                text=button_text,
+                callback_data=f"promo_detail:{promo.promo_code_id}")
         )
+    
     kb.row(
-        InlineKeyboardButton(text=_("back_to_admin_panel_button"),
+        InlineKeyboardButton(text=_("back_to_admin_panel_button", default="⬅️ Назад"),
                              callback_data="admin_action:main"))
 
     await callback.message.edit_text(
-        _("admin_manage_promos_title"),
-        reply_markup=kb.as_markup())
+        _("admin_promo_management_title", default="🎟 <b>Управление промокодами</b>\n\nВыберите промокод для детального просмотра:"),
+        reply_markup=kb.as_markup(),
+        parse_mode="HTML")
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("promo_detail:"))
+async def promo_detail_handler(callback: types.CallbackQuery,
+                             i18n_data: dict, settings: Settings,
+                             session: AsyncSession):
+    """Show detailed promo code information with management options"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error displaying promo details.", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    promo_id = int(callback.data.split(":")[1])
+    promo = await promo_code_dal.get_promo_code_by_id(session, promo_id)
+    if not promo:
+        await callback.answer(_("admin_promo_not_found", default="Промокод не найден"), show_alert=True)
+        return
+
+    # Determine status
+    status = _("admin_promo_status_active", default="✅ Активен")
+    if not promo.is_active:
+        status = _("admin_promo_status_inactive", default="🚫 Неактивен")
+    elif promo.valid_until and promo.valid_until < datetime.now(timezone.utc):
+        status = _("admin_promo_status_expired", default="⏰ Истек")
+    elif promo.current_activations >= promo.max_activations:
+        status = _("admin_promo_status_used_up", default="🔄 Исчерпан")
+
+    # Format validity
+    validity = _("admin_promo_valid_indefinitely", default="Неограниченно")
+    if promo.valid_until:
+        validity = promo.valid_until.strftime('%Y-%m-%d %H:%M')
+
+    # Format created date
+    created_date = promo.created_at.strftime('%Y-%m-%d %H:%M') if promo.created_at else "N/A"
+    creator = f"Admin {promo.created_by_admin_id}" if promo.created_by_admin_id else "N/A"
+
+    # Build card text
+    card_text = _(
+        "admin_promo_card_title",
+        default="🎟 <b>Промокод: {code}</b>",
+        code=promo.code
+    ) + "\n\n"
+    
+    card_text += _(
+        "admin_promo_card_bonus_days",
+        default="🎁 Бонусные дни: <b>{days}</b>",
+        days=promo.bonus_days
+    ) + "\n"
+    
+    card_text += _(
+        "admin_promo_card_activations", 
+        default="🔢 Активации: <b>{current}/{max}</b>",
+        current=promo.current_activations,
+        max=promo.max_activations
+    ) + "\n"
+    
+    card_text += _(
+        "admin_promo_card_validity",
+        default="⏰ Действует до: <b>{validity}</b>",
+        validity=validity
+    ) + "\n"
+    
+    card_text += _(
+        "admin_promo_card_status",
+        default="📊 Статус: <b>{status}</b>",
+        status=status
+    ) + "\n"
+    
+    card_text += _(
+        "admin_promo_card_created",
+        default="📅 Создан: <b>{created}</b>",
+        created=created_date
+    ) + "\n"
+    
+    card_text += _(
+        "admin_promo_card_created_by",
+        default="👤 Создал: <b>{creator}</b>",
+        creator=creator
+    )
+
+    # Build keyboard
+    kb = InlineKeyboardBuilder()
+    
+    # Row 1: Edit and Toggle status
+    kb.row(
+        InlineKeyboardButton(
+            text=_("admin_promo_edit_button", default="✏️ Редактировать"),
+            callback_data=f"promo_edit:{promo_id}"),
+        InlineKeyboardButton(
+            text=_("admin_promo_toggle_status_button", default="🔄 Вкл/Выкл"),
+            callback_data=f"promo_toggle:{promo_id}")
+    )
+    
+    # Row 2: View activations and Delete
+    kb.row(
+        InlineKeyboardButton(
+            text=_("admin_promo_view_activations_button", default="📋 Активации"),
+            callback_data=f"promo_activations:{promo_id}"),
+        InlineKeyboardButton(
+            text=_("admin_promo_delete_button", default="🗑 Удалить"),
+            callback_data=f"promo_delete:{promo_id}")
+    )
+    
+    # Row 3: Back to list
+    kb.row(
+        InlineKeyboardButton(
+            text=_("admin_promo_back_to_list_button", default="⬅️ К списку"),
+            callback_data="admin_action:promo_management")
+    )
+
+    await callback.message.edit_text(
+        card_text,
+        reply_markup=kb.as_markup(),
+        parse_mode="HTML")
+    await callback.answer()
+
+
+# Legacy manage_promo_codes_handler - keeping for compatibility
+@router.callback_query(F.data == "admin_action:manage_promos")
+async def manage_promo_codes_handler(callback: types.CallbackQuery,
+                                     i18n_data: dict, settings: Settings,
+                                     session: AsyncSession):
+    # Redirect to new unified handler
+    await promo_management_handler(callback, i18n_data, settings, session)
 
 
 @router.callback_query(F.data.startswith("promo_edit:"))

@@ -306,6 +306,7 @@ class Settings(BaseSettings):
     LOG_PAYMENTS: bool = Field(default=True, description="Send notifications for successful payments")
     LOG_PROMO_ACTIVATIONS: bool = Field(default=True, description="Send notifications for promo code activations")
     LOG_TRIAL_ACTIVATIONS: bool = Field(default=True, description="Send notifications for trial activations")
+    LOG_SUSPICIOUS_ACTIVITY: bool = Field(default=True, description="Send notifications for suspicious promo attempts")
 
     model_config = SettingsConfigDict(env_file='.env',
                                       env_file_encoding='utf-8',

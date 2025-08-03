@@ -105,30 +105,23 @@ async def process_promo_code_input(message: types.Message, state: FSMContext,
 
     response_to_user_text = ""
     if is_suspicious:
-
-        if settings.ADMIN_IDS:
-            admin_notify_key = "admin_suspicious_promo_attempt_notification" if user.username else "admin_suspicious_promo_attempt_notification_no_username"
-
-            admin_lang = settings.DEFAULT_LANGUAGE
-            _admin = lambda k, **kw: i18n.gettext(admin_lang, k, **kw)
-            admin_notification_text = _admin(
-                admin_notify_key,
-                user_id=user.id,
-                user_username=user.username or "N/A",
-                user_first_name=user.first_name or "N/A",
-                promo_code_input=hcode(code_input))
-            for admin_id in settings.ADMIN_IDS:
-                try:
-                    await bot.send_message(admin_id,
-                                           admin_notification_text,
-                                           parse_mode="HTML")
-                except Exception as e_admin_notify:
-                    logging.error(
-                        f"Failed to send suspicious promo notification to admin {admin_id}: {e_admin_notify}"
-                    )
+        # Send notification through NotificationService if enabled
+        if settings.LOG_SUSPICIOUS_ACTIVITY:
+            try:
+                from bot.services.notification_service import NotificationService
+                notification_service = NotificationService(bot, settings, i18n)
+                await notification_service.notify_suspicious_promo_attempt(
+                    user_id=user.id,
+                    username=user.username,
+                    first_name=user.first_name,
+                    suspicious_input=code_input
+                )
+            except Exception as e:
+                logging.error(f"Failed to send suspicious promo notification: {e}")
 
         response_to_user_text = _("promo_code_not_found",
                                   code=hcode(code_input.upper()))
+        reply_markup = get_back_to_main_menu_markup(current_lang, i18n)
     else:
 
         success, result = await promo_code_service.apply_promo_code(

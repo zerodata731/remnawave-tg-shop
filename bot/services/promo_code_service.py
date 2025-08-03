@@ -11,7 +11,7 @@ from db.models import PromoCode, User
 
 from .subscription_service import SubscriptionService
 from bot.middlewares.i18n import JsonI18n
-from .notification_service import notify_admin_promo_activation, NotificationService
+from .notification_service import NotificationService
 
 
 class PromoCodeService:
@@ -75,15 +75,6 @@ class PromoCodeService:
                 except Exception as e:
                     logging.error(f"Failed to send promo activation notification: {e}")
                 
-                # Legacy notification for backwards compatibility
-                await notify_admin_promo_activation(
-                    self.bot,
-                    self.settings,
-                    self.i18n,
-                    user_id,
-                    code_input_upper,
-                    bonus_days,
-                )
                 return True, new_end_date
             else:
 

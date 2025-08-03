@@ -92,8 +92,7 @@ async def create_referral_result(inline_query: InlineQuery, bot: Bot,
                    "✨ Быстрый и надежный\n"
                    "🔒 Полная анонимность\n"
                    "🌍 Серверы по всему миру\n"
-                   "💎 Бесплатный пробный период\n\n"
-                   "Переходи по ссылке: {referral_link}",
+                   "💎 Бесплатный пробный период\n\n{referral_link}",
             referral_link=referral_link
         )
         
@@ -180,8 +179,10 @@ async def create_user_stats_result(session: AsyncSession, i18n_instance, lang: s
                 default="👥 Статистика пользователей"
             ),
             description=_(
-                "inline_admin_user_stats_desc",
-                default=f"Всего: {user_stats['total_users']}, Активных: {user_stats['paid_subscriptions']}"
+                "inline_stats_description",
+                default="Всего: {total}, Активных: {active}",
+                total=user_stats['total_users'],
+                active=user_stats['paid_subscriptions']
             ),
             input_message_content=InputTextMessageContent(
                 message_text=stats_text,
@@ -225,8 +226,9 @@ async def create_financial_stats_result(session: AsyncSession, i18n_instance, la
                 default="💰 Финансовая статистика"
             ),
             description=_(
-                "inline_admin_financial_stats_desc",
-                default=f"Сегодня: {financial_stats['today_revenue']:.2f} RUB"
+                "inline_financial_description",
+                default="Сегодня: {today} RUB",
+                today=f"{financial_stats['today_revenue']:.2f}"
             ),
             input_message_content=InputTextMessageContent(
                 message_text=stats_text,
@@ -296,8 +298,10 @@ async def create_system_stats_result(session: AsyncSession, i18n_instance, lang:
                 default="🖥 Системная статистика"
             ),
             description=_(
-                "inline_admin_system_stats_desc",
-                default=f"Онлайн: {active_subs}, Офлайн: {max(0, offline_users)}"
+                "inline_system_description",
+                default="Онлайн: {online}, Офлайн: {offline}",
+                online=active_subs,
+                offline=max(0, offline_users)
             ),
             input_message_content=InputTextMessageContent(
                 message_text=stats_text,
@@ -327,7 +331,7 @@ async def create_help_result(i18n_instance, lang: str, is_admin: bool) -> Inline
                    "💡 Просто напишите @{bot_username} и начните вводить команду в любом чате!"
         )
         title = _("inline_admin_help_title", default="🤖 Inline помощь (Админ)")
-        description = _("inline_admin_help_desc", default="Доступны команды: реф, стат, финансы, система")
+        description = _("inline_admin_help_description", default="Доступны команды: реф, стат, финансы, система")
     else:
         help_text = _(
             "inline_user_help_message", 
@@ -337,7 +341,7 @@ async def create_help_result(i18n_instance, lang: str, is_admin: bool) -> Inline
                    "💡 Просто напишите @{bot_username} и начните вводить 'реф' в любом чате!"
         )
         title = _("inline_user_help_title", default="🤖 Inline помощь")
-        description = _("inline_user_help_desc", default="Доступна команда: реф (реферальная ссылка)")
+        description = _("inline_user_help_description", default="Доступна команда: реф (реферальная ссылка)")
     
     return InlineQueryResultArticle(
         id="help",
