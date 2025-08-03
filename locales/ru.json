@@ -305,7 +305,7 @@
   "admin_promo_codes_menu_bulk_create": "📦 Массовое создание",
   "admin_bulk_promo_create_prompt": "📦 Массовое создание промокодов\n\nВведите данные в формате:\n<code>количество|дни|описание</code>\n\nПример:\n<code>10|7|Промо на неделю</code>",
   "admin_bulk_promo_invalid_format": "❌ Неверный формат. Используйте: количество|дни|описание",
-  "admin_bulk_promo_created_success": "✅ Создано {count} промокодов на {days} дней!\n\nОписание: {description}\nПромокоды: {codes}",
+  "admin_bulk_promo_created_success": "✅ Создано {count} промокодов на {days} дней!",
   
   "admin_logs_export_csv": "📄 Экспорт в CSV",
   "admin_logs_csv_export_started": "📄 Начинаю экспорт логов в CSV...",
@@ -425,6 +425,8 @@
   
   "admin_panel_stats_header": "Статистика панели",
   "admin_panel_online_label": "Онлайн",
+  "admin_panel_active_label": "Активных",
+  "admin_panel_disabled_label": "Отключенных",
   "admin_panel_offline_label": "Офлайн", 
   "admin_panel_expired_label": "Истекшие",
   "admin_panel_limited_label": "Ограниченные",

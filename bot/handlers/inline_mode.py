@@ -152,16 +152,14 @@ async def create_user_stats_result(session: AsyncSession, i18n_instance, lang: s
         
         stats_text = _(
             "inline_user_stats_message",
-            default="👥 <b>Статистика пользователей</b>\n\n"
+            default="📊 <b>Статистика Бота</b>\n👥 Пользователи\n\n"
                    "📊 Всего: <b>{total}</b>\n"
-                   "📈 Активных сегодня: <b>{active_today}</b>\n"
                    "💳 С платной подпиской: <b>{paid}</b>\n"
                    "🆓 На пробном периоде: <b>{trial}</b>\n"
                    "😴 Неактивных: <b>{inactive}</b>\n"
                    "🚫 Заблокированных: <b>{banned}</b>\n"
-                   "🎁 По реферальной программе: <b>{referral}</b>",
+                   "🎁 Привлечено по реферальной программе: <b>{referral}</b>",
             total=user_stats['total_users'],
-            active_today=user_stats['active_today'],
             paid=user_stats['paid_subscriptions'],
             trial=user_stats['trial_users'],
             inactive=user_stats['inactive_users'],
@@ -173,11 +171,11 @@ async def create_user_stats_result(session: AsyncSession, i18n_instance, lang: s
             id="admin_user_stats",
             title=_(
                 "inline_admin_user_stats_title",
-                default="👥 Статистика пользователей"
+                default="📊 Статистика пользователей"
             ),
             description=_(
-                "inline_stats_description",
-                default="Всего: {total}, Активных: {active}",
+                "inline_user_stats_description",
+                default="Всего: {total}, Платных: {active}",
                 total=user_stats['total_users'],
                 active=user_stats['paid_subscriptions']
             ),
@@ -240,53 +238,88 @@ async def create_financial_stats_result(session: AsyncSession, i18n_instance, la
 
 
 async def create_system_stats_result(session: AsyncSession, i18n_instance, lang: str, settings: Settings) -> Optional[InlineQueryResultArticle]:
-    """Create system statistics result with online/offline/expired/limited info"""
+    """Create panel statistics result with system/nodes/bandwidth info"""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     
     try:
-        from datetime import datetime, timezone
-        from sqlalchemy import select, func, and_
-        from db.models import User, Subscription
+        from bot.services.panel_api_service import PanelApiService
         
-        now = datetime.now(timezone.utc)
-        
-        # Count active subscriptions (online)
-        active_subs_stmt = select(func.count(Subscription.subscription_id)).where(
-            and_(
-                Subscription.is_active == True,
-                Subscription.end_date > now
-            )
-        )
-        active_subs = (await session.execute(active_subs_stmt)).scalar() or 0
-        
-        # Count expired subscriptions
-        expired_subs_stmt = select(func.count(Subscription.subscription_id)).where(
-            and_(
-                Subscription.is_active == True,
-                Subscription.end_date <= now
-            )
-        )
-        expired_subs = (await session.execute(expired_subs_stmt)).scalar() or 0
-        
-        # Count total users (approximation for "total")
-        total_users_stmt = select(func.count(User.user_id))
-        total_users = (await session.execute(total_users_stmt)).scalar() or 0
-        
-        # Offline = users without active subscriptions
-        offline_users = total_users - active_subs
-        
-        stats_text = _(
-            "inline_system_stats_message",
-            default="🖥 <b>Системная статистика</b>\n\n"
-                   "🟢 Онлайн: <b>{online}</b>\n"
-                   "🔴 Офлайн: <b>{offline}</b>\n"
-                   "⏰ Истекшие: <b>{expired}</b>\n"
-                   "👥 Всего пользователей: <b>{total}</b>",
-            online=active_subs,
-            offline=max(0, offline_users),
-            expired=expired_subs,
-            total=total_users
-        )
+        # Get panel stats similar to main statistics
+        async with PanelApiService(settings) as panel_service:
+            system_stats = await panel_service.get_system_stats()
+            bandwidth_stats = await panel_service.get_bandwidth_stats()
+            nodes_stats = await panel_service.get_nodes_statistics()
+            
+            if system_stats:
+                users = system_stats.get('users', {})
+                status_counts = users.get('statusCounts', {})
+                online_stats = system_stats.get('onlineStats', {})
+                
+                active_users = status_counts.get('ACTIVE', 0)
+                disabled_users = status_counts.get('DISABLED', 0) 
+                expired_users = status_counts.get('EXPIRED', 0)
+                limited_users = status_counts.get('LIMITED', 0)
+                total_users = users.get('totalUsers', 0)
+                online_now = online_stats.get('onlineNow', 0)
+                
+                # Memory usage
+                memory = system_stats.get('memory', {})
+                memory_usage = 0
+                if memory:
+                    memory_total = memory.get('total', 1)
+                    memory_used = memory.get('used', 0)
+                    memory_usage = (memory_used / memory_total) * 100 if memory_total > 0 else 0
+                
+                # Bandwidth
+                week_traffic = "N/A"
+                month_traffic = "N/A"
+                if bandwidth_stats:
+                    week_data = bandwidth_stats.get('bandwidthLastSevenDays', {})
+                    month_data = bandwidth_stats.get('bandwidthLast30Days', {}) or bandwidth_stats.get('bandwidthLastThirtyDays', {})
+                    
+                    week_traffic = week_data.get('current', 'N/A') if week_data else 'N/A'
+                    month_traffic = month_data.get('current', 'N/A') if month_data else 'N/A'
+                
+                # Nodes
+                active_nodes = 0
+                total_nodes = 0
+                if nodes_stats and 'lastSevenDays' in nodes_stats:
+                    unique_nodes = set()
+                    for node_data in nodes_stats.get('lastSevenDays', []):
+                        unique_nodes.add(node_data.get('nodeName', ''))
+                    total_nodes = len(unique_nodes)
+                    active_nodes = total_nodes  # Assume all are active
+                elif system_stats and 'nodes' in system_stats:
+                    active_nodes = system_stats.get('nodes', {}).get('totalOnline', 0)
+                    total_nodes = active_nodes
+                
+                stats_text = _(
+                    "inline_system_stats_message",
+                    default="🖥 <b>Статистика панели</b>\n\n"
+                           "🟢 Онлайн: <b>{online}</b>\n"
+                           "📊 Активных: <b>{active}</b>\n"
+                           "🔴 Отключенных: <b>{disabled}</b>\n"
+                           "⏰ Истекшие: <b>{expired}</b>\n"
+                           "⚠️ Ограниченные: <b>{limited}</b>\n"
+                           "👥 Всего пользователей: <b>{total}</b>\n"
+                           "💾 Использование RAM: <b>{memory:.1f}%</b>\n"
+                           "📊 Трафик за неделю: <b>{week_traffic}</b>\n"
+                           "📊 Трафик за месяц: <b>{month_traffic}</b>\n"
+                           "🔗 Активных нод: <b>{active_nodes}/{total_nodes}</b>",
+                    online=online_now,
+                    active=active_users,
+                    disabled=disabled_users,
+                    expired=expired_users,
+                    limited=limited_users,
+                    total=total_users,
+                    memory=memory_usage,
+                    week_traffic=week_traffic,
+                    month_traffic=month_traffic,
+                    active_nodes=active_nodes,
+                    total_nodes=total_nodes
+                )
+            else:
+                stats_text = _("inline_panel_stats_error", default="❌ Ошибка получения данных с панели")
         
         return InlineQueryResultArticle(
             id="admin_system_stats",
@@ -296,9 +329,7 @@ async def create_system_stats_result(session: AsyncSession, i18n_instance, lang:
             ),
             description=_(
                 "inline_system_description",
-                default="Онлайн: {online}, Офлайн: {offline}",
-                online=active_subs,
-                offline=max(0, offline_users)
+                default="Панель: онлайн, ноды, трафик"
             ),
             input_message_content=InputTextMessageContent(
                 message_text=stats_text,
@@ -309,6 +340,22 @@ async def create_system_stats_result(session: AsyncSession, i18n_instance, lang:
         
     except Exception as e:
         logging.error(f"Error creating system stats result: {e}")
+        # Fallback error message
+        error_text = _("inline_panel_stats_error", default="❌ Ошибка получения данных с панели")
+        
+        return InlineQueryResultArticle(
+            id="admin_system_stats",
+            title=_(
+                "inline_admin_system_stats_title", 
+                default="🖥 Системная статистика"
+            ),
+            description=_("inline_system_error", default="Ошибка получения данных"),
+            input_message_content=InputTextMessageContent(
+                message_text=error_text,
+                parse_mode="HTML"
+            ),
+            thumbnail_url=settings.INLINE_SYSTEM_STATS_THUMBNAIL_URL
+        )
         return None
 
 

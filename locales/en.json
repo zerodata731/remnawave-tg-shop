@@ -305,7 +305,7 @@
   "admin_promo_codes_menu_bulk_create": "📦 Bulk Creation",
   "admin_bulk_promo_create_prompt": "📦 Bulk Promo Code Creation\n\nEnter data in format:\n<code>quantity|days|description</code>\n\nExample:\n<code>10|7|Weekly promo</code>",
   "admin_bulk_promo_invalid_format": "❌ Invalid format. Use: quantity|days|description",
-  "admin_bulk_promo_created_success": "✅ Created {count} promo codes for {days} days!\n\nDescription: {description}\nCodes: {codes}",
+  "admin_bulk_promo_created_success": "✅ Created {count} promo codes for {days} days!",
   
   "admin_logs_export_csv": "📄 Export to CSV",
   "admin_logs_csv_export_started": "📄 Starting log export to CSV...",
@@ -425,6 +425,8 @@
   
   "admin_panel_stats_header": "Panel Statistics",
   "admin_panel_online_label": "Online",
+  "admin_panel_active_label": "Active",
+  "admin_panel_disabled_label": "Disabled",
   "admin_panel_offline_label": "Offline",
   "admin_panel_expired_label": "Expired", 
   "admin_panel_limited_label": "Limited",

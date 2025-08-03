@@ -1140,15 +1140,13 @@ async def create_bulk_promo_codes_final(callback_or_message,
         await session.commit()
         
         # Send success message
-        codes_text = " ".join(created_codes)
         success_text = _(
             "admin_bulk_promo_created_success",
-            default="✅ Создано {count} промокодов на {days} дней!\n\nДействуют до: {validity}\nМакс. активации: {max_act}\n\nПромокоды:\n{codes}",
+            default="✅ Создано {count} промокодов на {days} дней!\n\nДействуют до: {validity}\nМакс. активации: {max_act}",
             count=quantity,
             days=bonus_days,
             validity=valid_until_str_display,
-            max_act=max_activations,
-            codes=codes_text[:3500] + "..." if len(codes_text) > 3500 else codes_text
+            max_act=max_activations
         )
         
         if hasattr(callback_or_message, 'message'):
@@ -1162,22 +1160,21 @@ async def create_bulk_promo_codes_final(callback_or_message,
             parse_mode="HTML"
         )
         
-        # Send codes as file if too many
-        if len(codes_text) > 3500:
-            codes_file_content = "\n".join(created_codes)
-            codes_file = types.BufferedInputFile(
-                codes_file_content.encode('utf-8'),
-                filename=f"bulk_promo_codes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        # Always send codes as file
+        codes_file_content = "\n".join(created_codes)
+        codes_file = types.BufferedInputFile(
+            codes_file_content.encode('utf-8'),
+            filename=f"bulk_promo_codes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        )
+        
+        await target_message.answer_document(
+            codes_file,
+            caption=_(
+                "admin_bulk_promo_codes_file",
+                default="📄 Все созданные промокоды в файле ({count} шт.)",
+                count=quantity
             )
-            
-            await target_message.answer_document(
-                codes_file,
-                caption=_(
-                    "admin_bulk_promo_codes_file",
-                    default="📄 Все созданные промокоды в файле",
-                    count=quantity
-                )
-            )
+        )
         
     except Exception as e:
         logging.error(f"Error creating bulk promo codes: {e}")
