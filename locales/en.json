@@ -323,5 +323,42 @@
   "admin_csv_header_raw_update_preview": "Update Preview",
   
   "admin_banned_users_empty": "📋 Banned Users\n\nList is empty",
-  "admin_banned_users_list": "📋 Banned Users ({count}):\n\n{users}"
+  "admin_banned_users_list": "📋 Banned Users ({count}):\n\n{users}",
+  
+  "admin_panel_stats_header": "Panel Statistics",
+  "admin_bulk_promo_invalid_values": "❌ Invalid values: {error}",
+  
+  "admin_bulk_promo_step1_quantity": "📦 <b>Bulk Promo Code Creation</b>\n\n<b>Step 1 of 4:</b> Quantity\n\nEnter the number of promo codes to create (1-1000):",
+  "admin_bulk_promo_step2_bonus_days": "📦 <b>Bulk Promo Code Creation</b>\n\n<b>Step 2 of 4:</b> Bonus Days\n\nQuantity: <b>{quantity}</b>\n\nEnter the number of bonus days (1-365):",
+  "admin_bulk_promo_step3_max_activations": "📦 <b>Bulk Promo Code Creation</b>\n\n<b>Step 3 of 4:</b> Max Activations\n\nQuantity: <b>{quantity}</b>\nBonus days: <b>{bonus_days}</b>\n\nEnter the maximum number of activations for each promo code (1-10000):",
+  "admin_bulk_promo_step4_validity": "📦 <b>Bulk Promo Code Creation</b>\n\n<b>Step 4 of 4:</b> Validity Period\n\nQuantity: <b>{quantity}</b>\nBonus days: <b>{bonus_days}</b>\nMax activations: <b>{max_activations}</b>\n\nChoose the validity period for promo codes:",
+  
+  "admin_bulk_promo_invalid_quantity": "❌ Quantity must be between 1 and 1000",
+  "admin_bulk_promo_invalid_bonus_days": "❌ Bonus days must be between 1 and 365",
+  "admin_bulk_promo_invalid_max_activations": "❌ Max activations must be between 1 and 10000",
+  "admin_bulk_promo_invalid_validity_days": "❌ Validity days must be between 1 and 365",
+  
+  "admin_bulk_promo_unlimited_validity": "♾️ Unlimited",
+  "admin_bulk_promo_set_validity": "⏰ Set Period",
+  "admin_bulk_promo_enter_validity_days": "⏰ Enter the number of validity days for promo codes (1-365):",
+  
+  "admin_bulk_promo_creating": "⏳ Creating {quantity} promo codes...",
+  
+  "admin_promo_step1_code": "🎟 <b>Create Promo Code</b>\n\n<b>Step 1 of 5:</b> Promo Code\n\nEnter promo code (3-30 characters, letters and numbers only):",
+  "admin_promo_step2_bonus_days": "🎟 <b>Create Promo Code</b>\n\n<b>Step 2 of 5:</b> Bonus Days\n\nCode: <b>{code}</b>\n\nEnter the number of bonus days (1-365):",
+  "admin_promo_step3_max_activations": "🎟 <b>Create Promo Code</b>\n\n<b>Step 3 of 5:</b> Max Activations\n\nCode: <b>{code}</b>\nBonus days: <b>{bonus_days}</b>\n\nEnter the maximum number of activations (1-10000):",
+  "admin_promo_step4_validity": "🎟 <b>Create Promo Code</b>\n\n<b>Step 4 of 5:</b> Validity Period\n\nCode: <b>{code}</b>\nBonus days: <b>{bonus_days}</b>\nMax activations: <b>{max_activations}</b>\n\nChoose the validity period for the promo code:",
+  "admin_promo_step5_description": "🎟 <b>Create Promo Code</b>\n\n<b>Step 5 of 5:</b> Description (optional)\n\nCode: <b>{code}</b>\nBonus days: <b>{bonus_days}</b>\nMax activations: <b>{max_activations}</b>\nValid until: <b>{validity}</b>\n\nEnter promo code description or click \"Skip\":",
+  
+  "admin_promo_invalid_code_format": "❌ Promo code must contain 3-30 characters (letters and numbers only)",
+  "admin_promo_code_already_exists": "❌ A promo code with this code already exists",
+  "admin_promo_processing_error": "❌ Error processing promo code",
+  "admin_promo_unlimited_validity": "♾️ Unlimited",
+  "admin_promo_set_validity": "⏰ Set Period",
+  "admin_promo_enter_validity_days": "⏰ Enter the number of validity days for the promo code (1-365):",
+  "admin_promo_skip_description": "⏭️ Skip",
+  "admin_promo_description_too_long": "❌ Description must not exceed 200 characters",
+  "admin_promo_creating": "⏳ Creating promo code...",
+  "admin_promo_created_success": "✅ Promo code created!\n\n🎟 Code: <b>{code}</b>\n🎁 Bonus days: <b>{days}</b>\n🔢 Max activations: <b>{max_act}</b>\n⏰ Valid until: <b>{validity}</b>\n📝 Description: {description}",
+  "admin_promo_creation_failed": "❌ Error creating promo code: {error}"
 }

@@ -460,3 +460,43 @@ class PanelApiService:
     async def get_bot_db_last_sync_status(
             self, session: AsyncSession) -> Optional[PanelSyncStatus]:
         return await panel_sync_dal.get_panel_sync_status(session)
+    
+    
+    async def get_panel_statistics(self) -> Optional[Dict[str, Any]]:
+        """Get general panel statistics"""
+        response_data = await self._request("GET", "/admin/stats", log_full_response=False)
+        if response_data and not response_data.get("error") and "response" in response_data:
+            return response_data.get("response")
+        return None
+    
+    
+    async def get_nodes_statistics(self) -> Optional[List[Dict[str, Any]]]:
+        """Get nodes statistics"""
+        response_data = await self._request("GET", "/admin/nodes/stats", log_full_response=False)
+        if response_data and not response_data.get("error") and "response" in response_data:
+            return response_data.get("response", {}).get("nodes", [])
+        return None
+    
+    
+    async def get_system_info(self) -> Optional[Dict[str, Any]]:
+        """Get system information"""
+        response_data = await self._request("GET", "/admin/system/info", log_full_response=False)
+        if response_data and not response_data.get("error") and "response" in response_data:
+            return response_data.get("response")
+        return None
+    
+    
+    async def get_online_users_count(self) -> Optional[int]:
+        """Get count of currently online users"""
+        response_data = await self._request("GET", "/admin/stats/online-users", log_full_response=False)
+        if response_data and not response_data.get("error") and "response" in response_data:
+            return response_data.get("response", {}).get("count", 0)
+        return None
+    
+    
+    async def get_users_activity_stats(self) -> Optional[Dict[str, Any]]:
+        """Get users activity statistics (today, week, never connected)"""
+        response_data = await self._request("GET", "/admin/stats/users-activity", log_full_response=False)
+        if response_data and not response_data.get("error") and "response" in response_data:
+            return response_data.get("response")
+        return None

@@ -8,6 +8,7 @@ from config.settings import Settings
 
 from db.dal import user_dal, payment_dal, panel_sync_dal
 from db.models import Payment, PanelSyncStatus
+from bot.services.panel_api_service import PanelApiService
 
 from bot.keyboards.inline.admin_keyboards import get_back_to_admin_panel_keyboard
 from bot.middlewares.i18n import JsonI18n
@@ -136,6 +137,49 @@ async def show_statistics_handler(callback: types.CallbackQuery,
             f"  {_('admin_stats_sync_details_label')}: {details_str}")
     else:
         stats_text_parts.append(f"\n{_('admin_sync_status_never_run')}")
+
+    # Panel Statistics
+    try:
+        panel_service = PanelApiService(settings)
+        
+        # Get panel system statistics
+        panel_stats = await panel_service.get_panel_statistics()
+        nodes_stats = await panel_service.get_nodes_statistics()
+        online_count = await panel_service.get_online_users_count()
+        users_activity = await panel_service.get_users_activity_stats()
+        
+        stats_text_parts.append(f"\n<b>🖥 {_('admin_panel_stats_header', default='Статистика панели')}</b>")
+        
+        if online_count is not None:
+            stats_text_parts.append(f"🟢 Онлайн сейчас: <b>{online_count}</b>")
+        
+        if users_activity:
+            today_connected = users_activity.get('today_connected', 'N/A')
+            week_connected = users_activity.get('week_connected', 'N/A')
+            never_connected = users_activity.get('never_connected', 'N/A')
+            stats_text_parts.append(f"📅 Подключались сегодня: <b>{today_connected}</b>")
+            stats_text_parts.append(f"📅 Подключались за неделю: <b>{week_connected}</b>")
+            stats_text_parts.append(f"❌ Никогда не подключались: <b>{never_connected}</b>")
+        
+        if nodes_stats:
+            active_nodes = len([node for node in nodes_stats if node.get('status') == 'active'])
+            total_nodes = len(nodes_stats)
+            stats_text_parts.append(f"🔗 Активных нод: <b>{active_nodes}/{total_nodes}</b>")
+        
+        if panel_stats:
+            system_info = panel_stats.get('system', {})
+            if system_info:
+                memory_usage = system_info.get('memory_usage_percent', 'N/A')
+                cpu_usage = system_info.get('cpu_usage_percent', 'N/A')
+                stats_text_parts.append(f"💾 Использование RAM: <b>{memory_usage}%</b>")
+                stats_text_parts.append(f"🔄 Загрузка CPU: <b>{cpu_usage}%</b>")
+        
+        await panel_service.close()
+        
+    except Exception as e:
+        logging.warning(f"Failed to fetch panel statistics: {e}")
+        stats_text_parts.append(f"\n<b>🖥 Статистика панели</b>")
+        stats_text_parts.append("❌ Не удалось получить данные с панели")
 
     final_text = "\n".join(stats_text_parts)
 

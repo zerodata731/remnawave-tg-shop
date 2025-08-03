@@ -32,29 +32,35 @@ async def create_promo_prompt_handler(callback: types.CallbackQuery,
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    prompt_text = _("admin_promo_create_prompt",
-                    example_format="MYPROMO20 7 100 30")
+    # Step 1: Ask for promo code
+    prompt_text = _(
+        "admin_promo_step1_code",
+        default="🎟 <b>Создание промокода</b>\n\n<b>Шаг 1 из 5:</b> Код промокода\n\nВведите код промокода (3-30 символов, только буквы и цифры):"
+    )
 
     try:
         await callback.message.edit_text(
             prompt_text,
-            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n))
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML")
     except Exception as e:
         logging.warning(
             f"Could not edit message for promo prompt: {e}. Sending new.")
         await callback.message.answer(
             prompt_text,
-            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n))
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML")
     await callback.answer()
-    await state.set_state(AdminStates.waiting_for_promo_details)
+    await state.set_state(AdminStates.waiting_for_promo_code)
 
 
-@router.message(AdminStates.waiting_for_promo_details, F.text)
-async def process_promo_code_details_handler(message: types.Message,
-                                             state: FSMContext,
-                                             i18n_data: dict,
-                                             settings: Settings,
-                                             session: AsyncSession):
+# Step 1: Process promo code
+@router.message(AdminStates.waiting_for_promo_code, F.text)
+async def process_promo_code_handler(message: types.Message,
+                                    state: FSMContext,
+                                    i18n_data: dict,
+                                    settings: Settings,
+                                    session: AsyncSession):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     if not i18n:
@@ -62,86 +68,456 @@ async def process_promo_code_details_handler(message: types.Message,
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    if not message.text:
-        await message.answer(_("admin_promo_invalid_format"))
-        return
-
-    parts = message.text.strip().split()
-    if not (3 <= len(parts) <= 4):
-        await message.answer(_("admin_promo_invalid_format"))
-        return
-
     try:
-        code_str = parts[0].upper()
+        code_str = message.text.strip().upper()
         if not (3 <= len(code_str) <= 30 and code_str.isalnum()):
-            raise ValueError(_("admin_promo_invalid_code_format"))
+            await message.answer(_(
+                "admin_promo_invalid_code_format",
+                default="❌ Код промокода должен содержать 3-30 символов (только буквы и цифры)"
+            ))
+            return
+        
+        # Check if code already exists
+        existing_promo = await promo_code_dal.get_promo_code_by_code(session, code_str)
+        if existing_promo:
+            await message.answer(_(
+                "admin_promo_code_already_exists",
+                default="❌ Промокод с таким кодом уже существует"
+            ))
+            return
+        
+        await state.update_data(promo_code=code_str)
+        
+        # Step 2: Ask for bonus days
+        prompt_text = _(
+            "admin_promo_step2_bonus_days",
+            default="🎟 <b>Создание промокода</b>\n\n<b>Шаг 2 из 5:</b> Бонусные дни\n\nКод: <b>{code}</b>\n\nВведите количество бонусных дней (1-365):",
+            code=code_str
+        )
+        
+        await message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_promo_bonus_days)
+        
+    except Exception as e:
+        logging.error(f"Error processing promo code: {e}")
+        await message.answer(_(
+            "admin_promo_processing_error",
+            default="❌ Ошибка обработки промокода"
+        ))
 
-        bonus_days = int(parts[1])
-        max_activations = int(parts[2])
-
-        valid_until_date: Optional[datetime] = None
-        valid_until_str_display = _("admin_promo_valid_indefinitely")
-
-        if len(parts) == 4:
-            valid_days_from_now = int(parts[3])
-            if valid_days_from_now <= 0:
-                raise ValueError(_("admin_promo_invalid_validity_days"))
-            valid_until_date = datetime.now(
-                timezone.utc) + timedelta(days=valid_days_from_now)
-            valid_until_str_display = _(
-                "admin_promo_valid_until_display",
-                date=valid_until_date.strftime('%Y-%m-%d'))
-
-        if bonus_days <= 0 or max_activations <= 0:
-            raise ValueError(_("admin_promo_invalid_bonus_or_activations"))
-
-    except ValueError as e:
-        await message.answer(_("admin_promo_invalid_values", error=str(e)))
+# Step 2: Process bonus days
+@router.message(AdminStates.waiting_for_promo_bonus_days, F.text)
+async def process_promo_bonus_days_handler(message: types.Message,
+                                          state: FSMContext,
+                                          i18n_data: dict,
+                                          settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
         return
-    except Exception as e_parse:
-        logging.error(
-            f"Error parsing promo details '{message.text}': {e_parse}")
-        await message.answer(_("admin_promo_invalid_format_general"))
-        return
-
-    admin_id = message.from_user.id if message.from_user else 0
-
-    promo_data_to_create = {
-        "code": code_str,
-        "bonus_days": bonus_days,
-        "max_activations": max_activations,
-        "created_by_admin_id": admin_id,
-        "valid_until": valid_until_date,
-        "is_active": True,
-        "current_activations": 0
-    }
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
     try:
-        created_promo = await promo_code_dal.create_promo_code(
-            session, promo_data_to_create)
-        await session.commit()
+        bonus_days = int(message.text.strip())
+        if bonus_days <= 0 or bonus_days > 365:
+            await message.answer(_(
+                "admin_promo_invalid_bonus_days",
+                default="❌ Бонусные дни должны быть от 1 до 365"
+            ))
+            return
+        
+        data = await state.get_data()
+        await state.update_data(bonus_days=bonus_days)
+        
+        # Step 3: Ask for max activations
+        prompt_text = _(
+            "admin_promo_step3_max_activations",
+            default="🎟 <b>Создание промокода</b>\n\n<b>Шаг 3 из 5:</b> Максимальные активации\n\nКод: <b>{code}</b>\nБонусные дни: <b>{bonus_days}</b>\n\nВведите максимальное количество активаций (1-10000):",
+            code=data['promo_code'],
+            bonus_days=bonus_days
+        )
+        
+        await message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_promo_max_activations)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_promo_invalid_bonus_days",
+            default="❌ Бонусные дни должны быть от 1 до 365"
+        ))
 
-        if created_promo:
-            success_text = _("admin_promo_created_success",
-                             code=created_promo.code,
-                             bonus_days=created_promo.bonus_days,
-                             max_activations=created_promo.max_activations,
-                             valid_until_str=valid_until_str_display)
-            await message.answer(success_text,
-                                 reply_markup=get_back_to_admin_panel_keyboard(
-                                     current_lang, i18n))
+# Step 3: Process max activations
+@router.message(AdminStates.waiting_for_promo_max_activations, F.text)
+async def process_promo_max_activations_handler(message: types.Message,
+                                               state: FSMContext,
+                                               i18n_data: dict,
+                                               settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    try:
+        max_activations = int(message.text.strip())
+        if max_activations <= 0 or max_activations > 10000:
+            await message.answer(_(
+                "admin_promo_invalid_max_activations",
+                default="❌ Максимальные активации должны быть от 1 до 10000"
+            ))
+            return
+        
+        data = await state.get_data()
+        await state.update_data(max_activations=max_activations)
+        
+        # Step 4: Ask for validity days (with buttons)
+        keyboard = InlineKeyboardBuilder()
+        keyboard.row(
+            InlineKeyboardButton(
+                text=_("admin_promo_unlimited_validity", default="♾️ Неограниченно"),
+                callback_data="promo_unlimited_validity"
+            )
+        )
+        keyboard.row(
+            InlineKeyboardButton(
+                text=_("admin_promo_set_validity", default="⏰ Установить срок"),
+                callback_data="promo_set_validity"
+            )
+        )
+        keyboard.row(
+            InlineKeyboardButton(
+                text=_("admin_panel_back_button", default="⬅️ Назад"),
+                callback_data="admin_panel_back"
+            )
+        )
+        
+        prompt_text = _(
+            "admin_promo_step4_validity",
+            default="🎟 <b>Создание промокода</b>\n\n<b>Шаг 4 из 5:</b> Срок действия\n\nКод: <b>{code}</b>\nБонусные дни: <b>{bonus_days}</b>\nМакс. активации: <b>{max_activations}</b>\n\nВыберите срок действия промокода:",
+            code=data['promo_code'],
+            bonus_days=data['bonus_days'],
+            max_activations=max_activations
+        )
+        
+        await message.answer(
+            prompt_text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_promo_validity_days)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_promo_invalid_max_activations",
+            default="❌ Максимальные активации должны быть от 1 до 10000"
+        ))
+
+# Handle validity choice buttons
+@router.callback_query(F.data == "promo_unlimited_validity", StateFilter(AdminStates.waiting_for_promo_validity_days))
+async def process_promo_unlimited_validity(callback: types.CallbackQuery,
+                                          state: FSMContext,
+                                          i18n_data: dict,
+                                          settings: Settings):
+    await state.update_data(validity_days=None)
+    await ask_for_promo_description(callback, state, i18n_data, settings)
+
+@router.callback_query(F.data == "promo_set_validity", StateFilter(AdminStates.waiting_for_promo_validity_days))
+async def process_promo_set_validity(callback: types.CallbackQuery,
+                                    state: FSMContext,
+                                    i18n_data: dict,
+                                    settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await callback.answer("Language service error.", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    prompt_text = _(
+        "admin_promo_enter_validity_days",
+        default="⏰ Введите количество дней действия промокода (1-365):"
+    )
+    
+    try:
+        await callback.message.edit_text(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    except Exception as e:
+        await callback.message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    await callback.answer()
+
+# Step 4: Process validity days (when user chooses to set)
+@router.message(AdminStates.waiting_for_promo_validity_days, F.text)
+async def process_promo_validity_days_handler(message: types.Message,
+                                             state: FSMContext,
+                                             i18n_data: dict,
+                                             settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    try:
+        validity_days = int(message.text.strip())
+        if validity_days <= 0 or validity_days > 365:
+            await message.answer(_(
+                "admin_promo_invalid_validity_days",
+                default="❌ Дни действия должны быть от 1 до 365"
+            ))
+            return
+        
+        await state.update_data(validity_days=validity_days)
+        
+        # Create a fake callback for consistency
+        fake_callback = types.CallbackQuery(
+            id="fake",
+            from_user=message.from_user,
+            chat_instance="fake",
+            message=message,
+            data="fake"
+        )
+        
+        await ask_for_promo_description(fake_callback, state, i18n_data, settings)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_promo_invalid_validity_days",
+            default="❌ Дни действия должны быть от 1 до 365"
+        ))
+
+async def ask_for_promo_description(callback_or_message,
+                                   state: FSMContext,
+                                   i18n_data: dict,
+                                   settings: Settings):
+    """Ask for promo description (final step)"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        if hasattr(callback_or_message, 'answer'):
+            await callback_or_message.answer("Language service error.", show_alert=True)
         else:
-            await message.answer(
-                _("admin_promo_creation_failed_duplicate", code=code_str))
+            await callback_or_message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    except Exception as e_db_create:
+    data = await state.get_data()
+    validity_days = data.get('validity_days')
+    validity_text = "Неограниченно" if validity_days is None else f"{validity_days} дн."
+    
+    # Step 5: Ask for description (optional)
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(
+        InlineKeyboardButton(
+            text=_("admin_promo_skip_description", default="⏭️ Пропустить"),
+            callback_data="promo_skip_description"
+        )
+    )
+    keyboard.row(
+        InlineKeyboardButton(
+            text=_("admin_panel_back_button", default="⬅️ Назад"),
+            callback_data="admin_panel_back"
+        )
+    )
+    
+    prompt_text = _(
+        "admin_promo_step5_description",
+        default="🎟 <b>Создание промокода</b>\n\n<b>Шаг 5 из 5:</b> Описание (опционально)\n\nКод: <b>{code}</b>\nБонусные дни: <b>{bonus_days}</b>\nМакс. активации: <b>{max_activations}</b>\nДействует: <b>{validity}</b>\n\nВведите описание промокода или нажмите \"Пропустить\":",
+        code=data['promo_code'],
+        bonus_days=data['bonus_days'],
+        max_activations=data['max_activations'],
+        validity=validity_text
+    )
+    
+    if hasattr(callback_or_message, 'message'):
+        try:
+            await callback_or_message.message.edit_text(
+                prompt_text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode="HTML"
+            )
+        except:
+            await callback_or_message.message.answer(
+                prompt_text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode="HTML"
+            )
+        if hasattr(callback_or_message, 'answer'):
+            await callback_or_message.answer()
+    else:
+        await callback_or_message.answer(
+            prompt_text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode="HTML"
+        )
+    
+    await state.set_state(AdminStates.waiting_for_promo_description)
+
+# Handle skip description button
+@router.callback_query(F.data == "promo_skip_description", StateFilter(AdminStates.waiting_for_promo_description))
+async def process_promo_skip_description(callback: types.CallbackQuery,
+                                        state: FSMContext,
+                                        i18n_data: dict,
+                                        settings: Settings,
+                                        session: AsyncSession):
+    await state.update_data(description=None)
+    await create_promo_code_final(callback, state, i18n_data, settings, session)
+
+# Step 5: Process description (optional)
+@router.message(AdminStates.waiting_for_promo_description, F.text)
+async def process_promo_description_handler(message: types.Message,
+                                           state: FSMContext,
+                                           i18n_data: dict,
+                                           settings: Settings,
+                                           session: AsyncSession):
+    description = message.text.strip()
+    if len(description) > 200:
+        current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+        i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+        if i18n:
+            _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+            await message.answer(_(
+                "admin_promo_description_too_long",
+                default="❌ Описание не должно превышать 200 символов"
+            ))
+        else:
+            await message.answer("Description too long")
+        return
+    
+    await state.update_data(description=description)
+    
+    # Create a fake callback for consistency
+    fake_callback = types.CallbackQuery(
+        id="fake",
+        from_user=message.from_user,
+        chat_instance="fake",
+        message=message,
+        data="fake"
+    )
+    
+    await create_promo_code_final(fake_callback, state, i18n_data, settings, session)
+
+async def create_promo_code_final(callback_or_message,
+                                 state: FSMContext,
+                                 i18n_data: dict,
+                                 settings: Settings,
+                                 session: AsyncSession):
+    """Final step to create the promo code"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        if hasattr(callback_or_message, 'answer'):
+            await callback_or_message.answer("Language service error.", show_alert=True)
+        else:
+            await callback_or_message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    data = await state.get_data()
+    promo_code = data['promo_code']
+    bonus_days = data['bonus_days']
+    max_activations = data['max_activations']
+    validity_days = data.get('validity_days')
+    description = data.get('description')
+    
+    # Create validity date
+    valid_until_date: Optional[datetime] = None
+    valid_until_str_display = _("admin_promo_valid_indefinitely", default="Неограниченно")
+    
+    if validity_days:
+        valid_until_date = datetime.now(timezone.utc) + timedelta(days=validity_days)
+        valid_until_str_display = valid_until_date.strftime('%Y-%m-%d')
+
+    # Show creating message
+    creating_text = _(
+        "admin_promo_creating",
+        default="⏳ Создаю промокод..."
+    )
+    
+    if hasattr(callback_or_message, 'message'):
+        try:
+            await callback_or_message.message.edit_text(creating_text)
+        except:
+            await callback_or_message.message.answer(creating_text)
+        if hasattr(callback_or_message, 'answer'):
+            await callback_or_message.answer()
+    else:
+        await callback_or_message.answer(creating_text)
+
+    # Create promo code
+    try:
+        promo_data = {
+            "code": promo_code,
+            "bonus_days": bonus_days,
+            "max_activations": max_activations,
+            "current_activations": 0,
+            "is_active": True,
+            "valid_until": valid_until_date,
+            "description": description
+        }
+        
+        await promo_code_dal.create_promo_code(session, promo_data)
+        await session.commit()
+        
+        # Send success message
+        success_text = _(
+            "admin_promo_created_success",
+            default="✅ Промокод создан!\n\n🎟 Код: <b>{code}</b>\n🎁 Бонусные дни: <b>{days}</b>\n🔢 Максимальные активации: <b>{max_act}</b>\n⏰ Действует до: <b>{validity}</b>\n📝 Описание: {description}",
+            code=promo_code,
+            days=bonus_days,
+            max_act=max_activations,
+            validity=valid_until_str_display,
+            description=description or "Не указано"
+        )
+        
+        if hasattr(callback_or_message, 'message'):
+            target_message = callback_or_message.message
+        else:
+            target_message = callback_or_message
+            
+        await target_message.answer(
+            success_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        
+    except Exception as e:
+        logging.error(f"Error creating promo code: {e}")
         await session.rollback()
-        logging.error(
-            f"Failed to create promo code '{code_str}' in DB: {e_db_create}",
-            exc_info=True)
-        await message.answer(_("admin_promo_creation_failed"))
-
+        error_text = _(
+            "admin_promo_creation_failed",
+            default="❌ Ошибка создания промокода: {error}",
+            error=str(e)
+        )
+        
+        if hasattr(callback_or_message, 'message'):
+            target_message = callback_or_message.message
+        else:
+            target_message = callback_or_message
+            
+        await target_message.answer(
+            error_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    
     await state.clear()
+
+# Legacy handler removed - using step-by-step creation now
 
 
 async def view_promo_codes_handler(callback: types.CallbackQuery,
@@ -341,8 +717,17 @@ async def promo_delete_handler(callback: types.CallbackQuery, i18n_data: dict,
     F.data == "admin_action:main",
     StateFilter(
         AdminStates.waiting_for_promo_details,
+        AdminStates.waiting_for_promo_code,
+        AdminStates.waiting_for_promo_bonus_days,
+        AdminStates.waiting_for_promo_max_activations,
+        AdminStates.waiting_for_promo_validity_days,
+        AdminStates.waiting_for_promo_description,
         AdminStates.waiting_for_promo_edit_details,
         AdminStates.waiting_for_bulk_promo_details,
+        AdminStates.waiting_for_bulk_promo_quantity,
+        AdminStates.waiting_for_bulk_promo_bonus_days,
+        AdminStates.waiting_for_bulk_promo_max_activations,
+        AdminStates.waiting_for_bulk_promo_validity_days,
     ),
 )
 async def cancel_promo_creation_state_to_menu(callback: types.CallbackQuery,
@@ -382,24 +767,26 @@ async def create_bulk_promo_prompt_handler(callback: types.CallbackQuery,
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
+    # Step 1: Ask for quantity
     prompt_text = _(
-        "admin_bulk_promo_create_prompt",
-        default="📦 Массовое создание промокодов\n\nВведите данные в формате:\n<количество> <бонусные_дни> <максимальное_использование> [дни_действия]\n\nПример: 50 7 100 30\n(создаст 50 промокодов на 7 дней с лимитом 100 активаций каждый, действующих 30 дней)",
-        example_format="50 7 100 30"
+        "admin_bulk_promo_step1_quantity",
+        default="📦 <b>Массовое создание промокодов</b>\n\n<b>Шаг 1 из 4:</b> Количество промокодов\n\nВведите количество промокодов для создания (1-1000):"
     )
 
     try:
         await callback.message.edit_text(
             prompt_text,
-            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n))
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML")
     except Exception as e:
         logging.warning(
             f"Could not edit message for bulk promo prompt: {e}. Sending new.")
         await callback.message.answer(
             prompt_text,
-            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n))
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML")
     await callback.answer()
-    await state.set_state(AdminStates.waiting_for_bulk_promo_details)
+    await state.set_state(AdminStates.waiting_for_bulk_promo_quantity)
 
 
 def generate_unique_promo_code(length: int = 8) -> str:
@@ -409,6 +796,386 @@ def generate_unique_promo_code(length: int = 8) -> str:
     characters = characters.replace('0', '').replace('O', '').replace('1', '').replace('I', '').replace('L', '')
     return ''.join(random.choice(characters) for _ in range(length))
 
+
+# Step 1: Process quantity
+@router.message(AdminStates.waiting_for_bulk_promo_quantity, F.text)
+async def process_bulk_promo_quantity_handler(message: types.Message,
+                                             state: FSMContext,
+                                             i18n_data: dict,
+                                             settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    try:
+        quantity = int(message.text.strip())
+        if quantity <= 0 or quantity > 1000:
+            await message.answer(_(
+                "admin_bulk_promo_invalid_quantity",
+                default="❌ Количество должно быть от 1 до 1000"
+            ))
+            return
+        
+        await state.update_data(quantity=quantity)
+        
+        # Step 2: Ask for bonus days
+        prompt_text = _(
+            "admin_bulk_promo_step2_bonus_days",
+            default="📦 <b>Массовое создание промокодов</b>\n\n<b>Шаг 2 из 4:</b> Бонусные дни\n\nКоличество: <b>{quantity}</b>\n\nВведите количество бонусных дней (1-365):",
+            quantity=quantity
+        )
+        
+        await message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_bulk_promo_bonus_days)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_bulk_promo_invalid_quantity",
+            default="❌ Количество должно быть от 1 до 1000"
+        ))
+
+# Step 2: Process bonus days
+@router.message(AdminStates.waiting_for_bulk_promo_bonus_days, F.text)
+async def process_bulk_promo_bonus_days_handler(message: types.Message,
+                                               state: FSMContext,
+                                               i18n_data: dict,
+                                               settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    try:
+        bonus_days = int(message.text.strip())
+        if bonus_days <= 0 or bonus_days > 365:
+            await message.answer(_(
+                "admin_bulk_promo_invalid_bonus_days", 
+                default="❌ Бонусные дни должны быть от 1 до 365"
+            ))
+            return
+        
+        data = await state.get_data()
+        await state.update_data(bonus_days=bonus_days)
+        
+        # Step 3: Ask for max activations
+        prompt_text = _(
+            "admin_bulk_promo_step3_max_activations",
+            default="📦 <b>Массовое создание промокодов</b>\n\n<b>Шаг 3 из 4:</b> Максимальные активации\n\nКоличество: <b>{quantity}</b>\nБонусные дни: <b>{bonus_days}</b>\n\nВведите максимальное количество активаций для каждого промокода (1-10000):",
+            quantity=data['quantity'],
+            bonus_days=bonus_days
+        )
+        
+        await message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_bulk_promo_max_activations)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_bulk_promo_invalid_bonus_days",
+            default="❌ Бонусные дни должны быть от 1 до 365"
+        ))
+
+# Step 3: Process max activations
+@router.message(AdminStates.waiting_for_bulk_promo_max_activations, F.text)
+async def process_bulk_promo_max_activations_handler(message: types.Message,
+                                                    state: FSMContext,
+                                                    i18n_data: dict,
+                                                    settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    try:
+        max_activations = int(message.text.strip())
+        if max_activations <= 0 or max_activations > 10000:
+            await message.answer(_(
+                "admin_bulk_promo_invalid_max_activations",
+                default="❌ Максимальные активации должны быть от 1 до 10000"
+            ))
+            return
+        
+        data = await state.get_data()
+        await state.update_data(max_activations=max_activations)
+        
+        # Step 4: Ask for validity days (optional)
+        keyboard = InlineKeyboardBuilder()
+        keyboard.row(
+            InlineKeyboardButton(
+                text=_("admin_bulk_promo_unlimited_validity", default="♾️ Неограниченно"),
+                callback_data="bulk_promo_unlimited_validity"
+            )
+        )
+        keyboard.row(
+            InlineKeyboardButton(
+                text=_("admin_bulk_promo_set_validity", default="⏰ Установить срок"),
+                callback_data="bulk_promo_set_validity"
+            )
+        )
+        keyboard.row(
+            InlineKeyboardButton(
+                text=_("admin_panel_back_button", default="⬅️ Назад"),
+                callback_data="admin_panel_back"
+            )
+        )
+        
+        prompt_text = _(
+            "admin_bulk_promo_step4_validity",
+            default="📦 <b>Массовое создание промокодов</b>\n\n<b>Шаг 4 из 4:</b> Срок действия\n\nКоличество: <b>{quantity}</b>\nБонусные дни: <b>{bonus_days}</b>\nМакс. активации: <b>{max_activations}</b>\n\nВыберите срок действия промокодов:",
+            quantity=data['quantity'],
+            bonus_days=data['bonus_days'],
+            max_activations=max_activations
+        )
+        
+        await message.answer(
+            prompt_text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode="HTML"
+        )
+        await state.set_state(AdminStates.waiting_for_bulk_promo_validity_days)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_bulk_promo_invalid_max_activations",
+            default="❌ Максимальные активации должны быть от 1 до 10000"
+        ))
+
+# Handle validity choice buttons
+@router.callback_query(F.data == "bulk_promo_unlimited_validity", StateFilter(AdminStates.waiting_for_bulk_promo_validity_days))
+async def process_bulk_promo_unlimited_validity(callback: types.CallbackQuery,
+                                               state: FSMContext,
+                                               i18n_data: dict,
+                                               settings: Settings,
+                                               session: AsyncSession):
+    await state.update_data(validity_days=None)
+    await create_bulk_promo_codes_final(callback, state, i18n_data, settings, session)
+
+@router.callback_query(F.data == "bulk_promo_set_validity", StateFilter(AdminStates.waiting_for_bulk_promo_validity_days))
+async def process_bulk_promo_set_validity(callback: types.CallbackQuery,
+                                         state: FSMContext,
+                                         i18n_data: dict,
+                                         settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await callback.answer("Language service error.", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    prompt_text = _(
+        "admin_bulk_promo_enter_validity_days",
+        default="⏰ Введите количество дней действия промокодов (1-365):"
+    )
+    
+    try:
+        await callback.message.edit_text(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    except Exception as e:
+        await callback.message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    await callback.answer()
+
+# Step 4: Process validity days (when user chooses to set)
+@router.message(AdminStates.waiting_for_bulk_promo_validity_days, F.text)
+async def process_bulk_promo_validity_days_handler(message: types.Message,
+                                                  state: FSMContext,
+                                                  i18n_data: dict,
+                                                  settings: Settings,
+                                                  session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    try:
+        validity_days = int(message.text.strip())
+        if validity_days <= 0 or validity_days > 365:
+            await message.answer(_(
+                "admin_bulk_promo_invalid_validity_days",
+                default="❌ Дни действия должны быть от 1 до 365"
+            ))
+            return
+        
+        await state.update_data(validity_days=validity_days)
+        
+        # Create a fake callback for consistency
+        fake_callback = types.CallbackQuery(
+            id="fake",
+            from_user=message.from_user,
+            chat_instance="fake",
+            message=message,
+            data="fake"
+        )
+        
+        await create_bulk_promo_codes_final(fake_callback, state, i18n_data, settings, session)
+        
+    except ValueError:
+        await message.answer(_(
+            "admin_bulk_promo_invalid_validity_days",
+            default="❌ Дни действия должны быть от 1 до 365"
+        ))
+
+async def create_bulk_promo_codes_final(callback_or_message,
+                                       state: FSMContext,
+                                       i18n_data: dict,
+                                       settings: Settings,
+                                       session: AsyncSession):
+    """Final step to create all promo codes"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        if hasattr(callback_or_message, 'answer'):
+            await callback_or_message.answer("Language service error.", show_alert=True)
+        else:
+            await callback_or_message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    data = await state.get_data()
+    quantity = data['quantity']
+    bonus_days = data['bonus_days']
+    max_activations = data['max_activations']
+    validity_days = data.get('validity_days')
+    
+    # Create validity date
+    valid_until_date: Optional[datetime] = None
+    valid_until_str_display = _("admin_promo_valid_indefinitely", default="Неограниченно")
+    
+    if validity_days:
+        valid_until_date = datetime.now(timezone.utc) + timedelta(days=validity_days)
+        valid_until_str_display = valid_until_date.strftime('%Y-%m-%d')
+
+    # Show creating message
+    creating_text = _(
+        "admin_bulk_promo_creating",
+        default="⏳ Создаю {quantity} промокодов...",
+        quantity=quantity
+    )
+    
+    if hasattr(callback_or_message, 'message'):
+        try:
+            await callback_or_message.message.edit_text(creating_text)
+        except:
+            await callback_or_message.message.answer(creating_text)
+        if hasattr(callback_or_message, 'answer'):
+            await callback_or_message.answer()
+    else:
+        await callback_or_message.answer(creating_text)
+
+    # Generate and create promo codes
+    created_codes = []
+    try:
+        for i in range(quantity):
+            # Generate unique code
+            promo_code = generate_unique_promo_code()
+            
+            # Ensure uniqueness
+            existing_promo = await promo_code_dal.get_promo_code_by_code(session, promo_code)
+            retries = 0
+            while existing_promo and retries < 10:
+                promo_code = generate_unique_promo_code()
+                existing_promo = await promo_code_dal.get_promo_code_by_code(session, promo_code)
+                retries += 1
+            
+            if retries >= 10:
+                raise Exception("Не удалось создать уникальный промокод")
+            
+            # Create promo code
+            promo_data = {
+                "code": promo_code,
+                "bonus_days": bonus_days,
+                "max_activations": max_activations,
+                "current_activations": 0,
+                "is_active": True,
+                "valid_until": valid_until_date,
+                "description": f"Bulk created #{i+1}/{quantity}"
+            }
+            
+            await promo_code_dal.create_promo_code(session, promo_data)
+            created_codes.append(promo_code)
+        
+        await session.commit()
+        
+        # Send success message
+        codes_text = " ".join(created_codes)
+        success_text = _(
+            "admin_bulk_promo_created_success",
+            default="✅ Создано {count} промокодов на {days} дней!\n\nДействуют до: {validity}\nМакс. активации: {max_act}\n\nПромокоды:\n{codes}",
+            count=quantity,
+            days=bonus_days,
+            validity=valid_until_str_display,
+            max_act=max_activations,
+            codes=codes_text[:3500] + "..." if len(codes_text) > 3500 else codes_text
+        )
+        
+        if hasattr(callback_or_message, 'message'):
+            target_message = callback_or_message.message
+        else:
+            target_message = callback_or_message
+            
+        await target_message.answer(
+            success_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        
+        # Send codes as file if too many
+        if len(codes_text) > 3500:
+            codes_file_content = "\n".join(created_codes)
+            codes_file = types.BufferedInputFile(
+                codes_file_content.encode('utf-8'),
+                filename=f"bulk_promo_codes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            )
+            
+            await target_message.answer_document(
+                codes_file,
+                caption=_(
+                    "admin_bulk_promo_codes_file",
+                    default="📄 Все созданные промокоды в файле",
+                    count=quantity
+                )
+            )
+        
+    except Exception as e:
+        logging.error(f"Error creating bulk promo codes: {e}")
+        await session.rollback()
+        error_text = _(
+            "admin_bulk_promo_creation_failed",
+            default="❌ Ошибка создания промокодов: {error}",
+            error=str(e)
+        )
+        
+        if hasattr(callback_or_message, 'message'):
+            target_message = callback_or_message.message
+        else:
+            target_message = callback_or_message
+            
+        await target_message.answer(
+            error_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    
+    await state.clear()
 
 @router.message(AdminStates.waiting_for_bulk_promo_details, F.text)
 async def process_bulk_promo_details_handler(message: types.Message,
