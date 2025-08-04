@@ -216,9 +216,8 @@ class NotificationService:
             suspicious_input=hd.quote(suspicious_input),
             timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z"))
 
-        # Send to log channel and admins
+        # Send to log channel
         await self._send_to_log_channel(message)
-        await self._send_to_admins(message)
     
     async def send_custom_notification(self, message: str, to_admins: bool = False, 
                                      to_log_channel: bool = True, thread_id: Optional[int] = None):
