@@ -419,7 +419,7 @@
   "admin_promo_toggle_status_button": "🔄 Вкл/Выкл",
   "admin_promo_view_activations_button": "📋 Активации",
   "admin_promo_back_to_list_button": "⬅️ К списку",
-  "admin_promo_toggle_success": "✅ Промокод <b>{code}</b> {status}",
+  "admin_promo_toggle_success": "✅ Промокод {code} {status}",
   "admin_promo_toggle_failed": "❌ Ошибка изменения статуса промокода",
   "admin_promo_no_activations": "📋 <b>Активации промокода: {code}</b>\n\n❌ Активаций не найдено",
   "admin_promo_activations_header": "📋 <b>Активации промокода: {code}</b>\n\n",

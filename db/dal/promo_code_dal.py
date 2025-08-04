@@ -77,7 +77,7 @@ async def get_promo_activations_by_code_id(session: AsyncSession, promo_code_id:
     from db.models import PromoCodeActivation
     stmt = (select(PromoCodeActivation)
             .where(PromoCodeActivation.promo_code_id == promo_code_id)
-            .order_by(PromoCodeActivation.created_at.desc())
+            .order_by(PromoCodeActivation.activated_at.desc())
             .limit(50))  # Limit to last 50 activations
     result = await session.execute(stmt)
     return result.scalars().all()

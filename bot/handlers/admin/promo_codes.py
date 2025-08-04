@@ -1095,7 +1095,7 @@ async def promo_activations_handler(callback: types.CallbackQuery, i18n_data: di
         )]
         
         for activation in activations:
-            activation_date = activation.created_at.strftime('%Y-%m-%d %H:%M') if activation.created_at else "N/A"
+            activation_date = activation.activated_at.strftime('%Y-%m-%d %H:%M') if activation.activated_at else "N/A"
             text_parts.append(_(
                 "admin_promo_activation_item",
                 default="👤 User ID: <b>{user_id}</b>\n📅 Дата: <b>{date}</b>\n",

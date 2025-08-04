@@ -420,7 +420,7 @@
   "admin_promo_toggle_status_button": "🔄 On/Off",
   "admin_promo_view_activations_button": "📋 Activations",
   "admin_promo_back_to_list_button": "⬅️ Back to list",
-  "admin_promo_toggle_success": "✅ Promo code <b>{code}</b> {status}",
+  "admin_promo_toggle_success": "✅ Promo code {code} {status}",
   "admin_promo_toggle_failed": "❌ Error changing promo code status",
   "admin_promo_no_activations": "📋 <b>Activations of promo code: {code}</b>\n\n❌ No activations found",
   "admin_promo_activations_header": "📋 <b>Activations of promo code: {code}</b>\n\n",
