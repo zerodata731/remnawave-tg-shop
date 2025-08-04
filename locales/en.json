@@ -271,10 +271,6 @@
   "admin_user_logs_error": "❌ Error loading user actions",
   "admin_direct_message_signature": "\n\n---\n💬 Message from administrator",
   
-
-  "inline_referral_title": "🎁 Invite a Friend",
-  "inline_referral_description": "Share referral link to get bonuses",
-  
   "inline_user_stats_message": "👥 <b>User Statistics</b>\n\n📊 Total: <b>{total}</b>\n📈 Active today: <b>{active_today}</b>\n💳 With paid subscription: <b>{paid}</b>\n🆓 On trial period: <b>{trial}</b>\n😴 Inactive: <b>{inactive}</b>\n🚫 Banned: <b>{banned}</b>\n🎁 Via referral program: <b>{referral}</b>",
   "inline_admin_user_stats_title": "👥 User Statistics",
   "inline_admin_user_stats_desc": "Total: {total}, Active: {paid}",
@@ -300,7 +296,8 @@
   "log_payment_received": "{provider_emoji} <b>Payment Received</b>\n\n👤 User: {user_display}\n💰 Amount: <b>{amount} {currency}</b>\n📅 Period: <b>{months} mo.</b>\n🏦 Provider: {payment_provider}\n🕐 Time: {timestamp}",
   "log_promo_activation": "🎁 <b>Promo Code Activated</b>\n\n👤 User: {user_display}\n🏷 Code: <code>{promo_code}</code>\n🎯 Bonus: <b>+{bonus_days}d</b>\n🕐 Time: {timestamp}",
   "log_trial_activation": "🆓 <b>Trial Activated</b>\n\n👤 User: {user_display}\n⏰ Valid until: <b>{end_date}</b>\n🕐 Time: {timestamp}",
-  
+  "log_suspicious_promo": "⚠️ <b>Suspicious Promo Code Attempt</b>\n\n👤 User: {user_display}\n🆔 ID: <code>{user_id}</code>\n📝 Input: <pre>{suspicious_input}</pre>\n🕐 Time: {timestamp}",
+
   "admin_general_cancel_operation": "Operation cancelled ❌",
   "admin_promo_codes_menu_bulk_create": "📦 Bulk Creation",
   "admin_bulk_promo_create_prompt": "📦 Bulk Promo Code Creation\n\nEnter data in format:\n<code>quantity|days|description</code>\n\nExample:\n<code>10|7|Weekly promo</code>",
@@ -317,7 +314,6 @@
   "admin_promo_edit_enter_validity_days": "⏰ Enter the number of validity days for the promo code (1-365):",
   "admin_promo_updated_success": "✅ Promo code updated!\n\n🎟 Code: <b>{code}</b>\n🎁 Bonus days: <b>{days}</b>\n🔢 Max activations: <b>{max_act}</b>\n⏰ Valid until: <b>{validity}</b>",
   "admin_promo_update_failed": "❌ Error updating promo code",
-  "admin_promo_invalid_validity_days": "❌ Validity days must be from 1 to 365",
   
   "admin_logs_export_csv": "📄 Export to CSV",
   "admin_logs_csv_export_started": "📄 Starting log export to CSV...",
@@ -338,7 +334,6 @@
   "admin_banned_users_list": "📋 Banned Users ({count}):\n\n{users}",
   
   "admin_panel_stats_header": "Panel Statistics",
-  "admin_bulk_promo_invalid_values": "❌ Invalid values: {error}",
   
   "admin_bulk_promo_step1_quantity": "📦 <b>Bulk Promo Code Creation</b>\n\n<b>Step 1 of 4:</b> Quantity\n\nEnter the number of promo codes to create (1-1000):",
   "admin_bulk_promo_step2_bonus_days": "📦 <b>Bulk Promo Code Creation</b>\n\n<b>Step 2 of 4:</b> Bonus Days\n\nQuantity: <b>{quantity}</b>\n\nEnter the number of bonus days (1-365):",
@@ -348,7 +343,6 @@
   "admin_bulk_promo_invalid_quantity": "❌ Quantity must be between 1 and 1000",
   "admin_bulk_promo_invalid_bonus_days": "❌ Bonus days must be between 1 and 365",
   "admin_bulk_promo_invalid_max_activations": "❌ Max activations must be between 1 and 10000",
-  "admin_bulk_promo_invalid_validity_days": "❌ Validity days must be between 1 and 365",
   
   "admin_bulk_promo_unlimited_validity": "♾️ Unlimited",
   "admin_bulk_promo_set_validity": "⏰ Set Period",
@@ -361,7 +355,6 @@
   "admin_promo_step3_max_activations": "🎟 <b>Create Promo Code</b>\n\n<b>Step 3 of 4:</b> Max Activations\n\nCode: <b>{code}</b>\nBonus days: <b>{bonus_days}</b>\n\nEnter the maximum number of activations (1-10000):",
   "admin_promo_step4_validity": "🎟 <b>Create Promo Code</b>\n\n<b>Step 4 of 4:</b> Validity Period\n\nCode: <b>{code}</b>\nBonus days: <b>{bonus_days}</b>\nMax activations: <b>{max_activations}</b>\n\nChoose the validity period for the promo code:",
   
-  "admin_promo_invalid_code_format": "❌ Promo code must contain 3-30 characters (letters and numbers only)",
   "admin_promo_code_already_exists": "❌ A promo code with this code already exists",
   "admin_promo_processing_error": "❌ Error processing promo code",
   "admin_promo_unlimited_validity": "♾️ Unlimited",
@@ -370,8 +363,6 @@
   "admin_promo_skip_description": "⏭️ Skip",
   "admin_promo_description_too_long": "❌ Description must not exceed 200 characters",
   "admin_promo_creating": "⏳ Creating promo code...",
-  "admin_promo_created_success": "✅ Promo code created!\n\n🎟 Code: <b>{code}</b>\n🎁 Bonus days: <b>{days}</b>\n🔢 Max activations: <b>{max_act}</b>\n⏰ Valid until: <b>{validity}</b>",
-  "admin_promo_creation_failed": "❌ Error creating promo code: {error}",
   
   "admin_panel_back_button": "⬅️ Back",
   "admin_bulk_promo_creation_failed": "❌ Error creating promo codes: {error}",
@@ -401,8 +392,6 @@
   "admin_user_subscription_expired": "Expired {end_date}",
   "admin_user_subscription_none": "No active subscription",
   
-  "admin_user_logs_title": "📋 <b>User logs {user_id}</b>",
-  "admin_user_logs_empty": "No logs available",
   "admin_user_logs_count": "Total entries: {count}",
   "admin_user_logs_entry": "📅 {timestamp}\n📝 {event_type}: {content}",
   
@@ -411,9 +400,6 @@
   "admin_user_subscription_error": "Loading error",
   
   "admin_bulk_promo_unique_generation_failed": "Failed to create unique promo code",
-  
-  "admin_suspicious_promo_attempt_notification": "⚠️ <b>Suspicious promo code attempt</b>\n\n👤 User: <b>@{user_username}</b> (ID: {user_id})\n📝 Name: <b>{user_first_name}</b>\n💬 Input text: <b>{promo_code_input}</b>",
-  "admin_suspicious_promo_attempt_notification_no_username": "⚠️ <b>Suspicious promo code attempt</b>\n\n👤 User ID: <b>{user_id}</b>\n📝 Name: <b>{user_first_name}</b>\n💬 Input text: <b>{promo_code_input}</b>",
   
   "admin_promo_management_button": "🎟 Promo Management",
   "admin_promo_management_title": "🎟 <b>Promo Code Management</b>\n\nSelect a promo code for detailed view:",
@@ -429,13 +415,10 @@
   "admin_promo_status_inactive": "🚫 Inactive",
   "admin_promo_status_expired": "⏰ Expired",
   "admin_promo_status_used_up": "🔄 Used up",
-  "admin_promo_edit_button": "✏️ Edit",
   "admin_promo_toggle_status_button": "🔄 On/Off",
-  "admin_promo_delete_button": "🗑 Delete",
   "admin_promo_view_activations_button": "📋 Activations",
   "admin_promo_back_to_list_button": "⬅️ Back to list",
   
-  "admin_panel_stats_header": "Panel Statistics",
   "admin_panel_online_label": "Online",
   "admin_panel_active_label": "Active",
   "admin_panel_disabled_label": "Disabled",
@@ -466,8 +449,6 @@
   "inline_system_description": "🟢 Online: {online}, 📊 Active: {active}",
   "inline_admin_help_title": "Commands help",
   "inline_admin_help_description": "Available commands: ref, stat, financial, system",
-  "inline_user_help_title": "Commands help",
-  "inline_user_help_description": "Available command: ref (referral link)",
   
   "admin_user_stats_total_label": "Total",
   "admin_user_stats_paid_subs_label": "With paid subscription",

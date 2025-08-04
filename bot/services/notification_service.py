@@ -188,6 +188,37 @@ class NotificationService:
         
         # Send to log channel
         await self._send_to_log_channel(message)
+
+    async def notify_suspicious_promo_attempt(
+            self, user_id: int, suspicious_input: str,
+            username: Optional[str] = None, first_name: Optional[str] = None):
+        """Send notification about a suspicious promo code attempt."""
+        if not self.settings.LOG_SUSPICIOUS_ACTIVITY:
+            return
+
+        admin_lang = self.settings.DEFAULT_LANGUAGE
+        _ = lambda k, **kw: self.i18n.gettext(
+            admin_lang, k, **kw) if self.i18n else k
+
+        user_display = first_name or f"ID {user_id}"
+        if username:
+            user_display += f" (@{username})"
+
+        message = _(
+            "log_suspicious_promo",
+            default="⚠️ <b>Подозрительная попытка ввода промокода</b>\n\n"
+            "👤 Пользователь: {user_display}\n"
+            "🆔 ID: <code>{user_id}</code>\n"
+            "📝 Ввод: <pre>{suspicious_input}</pre>\n"
+            "🕐 Время: {timestamp}",
+            user_display=hd.quote(user_display),
+            user_id=user_id,
+            suspicious_input=hd.quote(suspicious_input),
+            timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z"))
+
+        # Send to log channel and admins
+        await self._send_to_log_channel(message)
+        await self._send_to_admins(message)
     
     async def send_custom_notification(self, message: str, to_admins: bool = False, 
                                      to_log_channel: bool = True, thread_id: Optional[int] = None):
