@@ -1016,6 +1016,110 @@ async def process_promo_edit_validity_handler(message: types.Message, state: FSM
         ))
 
 
+@router.callback_query(F.data.startswith("promo_toggle:"))
+async def promo_toggle_handler(callback: types.CallbackQuery, i18n_data: dict,
+                               settings: Settings, session: AsyncSession):
+    """Toggle promo code active status"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    promo_id = int(callback.data.split(":")[1])
+    promo = await promo_code_dal.get_promo_code_by_id(session, promo_id)
+    if not promo:
+        await callback.answer(_("admin_promo_not_found", default="Промокод не найден"), show_alert=True)
+        return
+
+    # Toggle status
+    new_status = not promo.is_active
+    update_data = {"is_active": new_status}
+    
+    updated = await promo_code_dal.update_promo_code(session, promo_id, update_data)
+    if updated:
+        await session.commit()
+        
+        status_text = _("admin_promo_status_activated", default="активирован") if new_status else _("admin_promo_status_deactivated", default="деактивирован")
+        success_text = _(
+            "admin_promo_toggle_success",
+            default="✅ Промокод <b>{code}</b> {status}",
+            code=promo.code,
+            status=status_text
+        )
+        
+        await callback.answer(success_text, show_alert=True)
+        
+        # Refresh the detail view
+        await promo_detail_handler(callback, i18n_data, settings, session)
+    else:
+        await session.rollback()
+        await callback.answer(_(
+            "admin_promo_toggle_failed",
+            default="❌ Ошибка изменения статуса промокода"
+        ), show_alert=True)
+
+
+@router.callback_query(F.data.startswith("promo_activations:"))
+async def promo_activations_handler(callback: types.CallbackQuery, i18n_data: dict,
+                                    settings: Settings, session: AsyncSession):
+    """Show promo code activations"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    promo_id = int(callback.data.split(":")[1])
+    promo = await promo_code_dal.get_promo_code_by_id(session, promo_id)
+    if not promo:
+        await callback.answer(_("admin_promo_not_found", default="Промокод не найден"), show_alert=True)
+        return
+
+    # Get activations for this promo code
+    activations = await promo_code_dal.get_promo_activations_by_code_id(session, promo_id)
+    
+    if not activations:
+        text = _(
+            "admin_promo_no_activations",
+            default="📋 <b>Активации промокода: {code}</b>\n\n❌ Активаций не найдено",
+            code=promo.code
+        )
+    else:
+        text_parts = [_(
+            "admin_promo_activations_header",
+            default="📋 <b>Активации промокода: {code}</b>\n\n",
+            code=promo.code
+        )]
+        
+        for activation in activations:
+            activation_date = activation.created_at.strftime('%Y-%m-%d %H:%M') if activation.created_at else "N/A"
+            text_parts.append(_(
+                "admin_promo_activation_item",
+                default="👤 User ID: <b>{user_id}</b>\n📅 Дата: <b>{date}</b>\n",
+                user_id=activation.user_id,
+                date=activation_date
+            ))
+        
+        text = "".join(text_parts)
+    
+    # Build keyboard with back button
+    kb = InlineKeyboardBuilder()
+    kb.row(
+        InlineKeyboardButton(
+            text=_("admin_promo_back_to_detail_button", default="⬅️ К промокоду"),
+            callback_data=f"promo_detail:{promo_id}")
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=kb.as_markup(),
+        parse_mode="HTML")
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("promo_delete:"))
 async def promo_delete_handler(callback: types.CallbackQuery, i18n_data: dict,
                                settings: Settings, session: AsyncSession):
