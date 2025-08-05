@@ -653,6 +653,70 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
     await state.clear()
 
 
+async def ban_user_prompt_handler(callback: types.CallbackQuery,
+                                 state: FSMContext, i18n_data: dict,
+                                 settings: Settings, session: AsyncSession):
+    """Prompt admin to enter user ID or username to ban"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error preparing ban prompt.", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    prompt_text = _(
+        "admin_ban_user_prompt",
+        default="🚫 Блокировка пользователя\n\nВведите ID пользователя или @username для блокировки:"
+    )
+
+    try:
+        await callback.message.edit_text(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    except Exception as e:
+        logging.warning(f"Could not edit message for ban prompt: {e}. Sending new.")
+        await callback.message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    
+    await callback.answer()
+    await state.set_state(AdminStates.waiting_for_user_id_to_ban)
+
+
+async def unban_user_prompt_handler(callback: types.CallbackQuery,
+                                   state: FSMContext, i18n_data: dict,
+                                   settings: Settings, session: AsyncSession):
+    """Prompt admin to enter user ID or username to unban"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error preparing unban prompt.", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    prompt_text = _(
+        "admin_unban_user_prompt",
+        default="✅ Разблокировка пользователя\n\nВведите ID пользователя или @username для разблокировки:"
+    )
+
+    try:
+        await callback.message.edit_text(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    except Exception as e:
+        logging.warning(f"Could not edit message for unban prompt: {e}. Sending new.")
+        await callback.message.answer(
+            prompt_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n)
+        )
+    
+    await callback.answer()
+    await state.set_state(AdminStates.waiting_for_user_id_to_unban)
+
+
 async def view_banned_users_handler(callback: types.CallbackQuery,
                                   state: FSMContext, i18n_data: dict,
                                   settings: Settings, session: AsyncSession):
@@ -676,9 +740,9 @@ async def view_banned_users_handler(callback: types.CallbackQuery,
         else:
             user_list = []
             for user in banned_users:
-                display_name = user.telegram_first_name or "Unknown"
-                if user.telegram_username:
-                    display_name = f"@{user.telegram_username}"
+                display_name = user.first_name or "Unknown"
+                if user.username:
+                    display_name = f"@{user.username}"
                 user_list.append(f"• {display_name} (ID: {user.user_id})")
             
             message_text = _(
@@ -696,3 +760,145 @@ async def view_banned_users_handler(callback: types.CallbackQuery,
     except Exception as e:
         logging.error(f"Error displaying banned users: {e}")
         await callback.answer("Error loading banned users", show_alert=True)
+
+
+@router.message(AdminStates.waiting_for_user_id_to_ban, F.text)
+async def process_ban_user_handler(message: types.Message, state: FSMContext,
+                                  settings: Settings, i18n_data: dict,
+                                  panel_service: PanelApiService,
+                                  session: AsyncSession):
+    """Process user ban input"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    input_text = message.text.strip() if message.text else ""
+    user_model: Optional[User] = None
+
+    # Try to find user by ID or username
+    if input_text.isdigit():
+        try:
+            user_model = await user_dal.get_user_by_id(session, int(input_text))
+        except ValueError:
+            pass
+    elif input_text.startswith("@") and USERNAME_REGEX.match(input_text[1:]):
+        user_model = await user_dal.get_user_by_username(session, input_text[1:])
+    elif USERNAME_REGEX.match(input_text):
+        user_model = await user_dal.get_user_by_username(session, input_text)
+
+    if not user_model:
+        await message.answer(_(
+            "admin_user_not_found",
+            default="❌ Пользователь не найден: {input}",
+            input=hcode(input_text)
+        ))
+        return
+
+    try:
+        # Check if user is already banned
+        if user_model.is_banned:
+            await message.answer(_(
+                "admin_user_already_banned",
+                default="⚠️ Пользователь уже заблокирован"
+            ))
+            await state.clear()
+            return
+
+        # Ban the user
+        await user_dal.update_user(session, user_model.user_id, {"is_banned": True})
+        
+        # Update on panel if user has panel UUID
+        if user_model.panel_user_uuid:
+            await panel_service.update_user_status_on_panel(user_model.panel_user_uuid, False)
+        
+        await session.commit()
+        
+        await message.answer(_(
+            "admin_user_ban_success",
+            default="✅ Пользователь {input} заблокирован",
+            input=hcode(input_text)
+        ))
+        
+    except Exception as e:
+        logging.error(f"Error banning user {user_model.user_id}: {e}")
+        await session.rollback()
+        await message.answer(_(
+            "admin_user_ban_error",
+            default="❌ Ошибка блокировки пользователя"
+        ))
+    
+    await state.clear()
+
+
+@router.message(AdminStates.waiting_for_user_id_to_unban, F.text)
+async def process_unban_user_handler(message: types.Message, state: FSMContext,
+                                    settings: Settings, i18n_data: dict,
+                                    panel_service: PanelApiService,
+                                    session: AsyncSession):
+    """Process user unban input"""
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await message.reply("Language service error.")
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    input_text = message.text.strip() if message.text else ""
+    user_model: Optional[User] = None
+
+    # Try to find user by ID or username
+    if input_text.isdigit():
+        try:
+            user_model = await user_dal.get_user_by_id(session, int(input_text))
+        except ValueError:
+            pass
+    elif input_text.startswith("@") and USERNAME_REGEX.match(input_text[1:]):
+        user_model = await user_dal.get_user_by_username(session, input_text[1:])
+    elif USERNAME_REGEX.match(input_text):
+        user_model = await user_dal.get_user_by_username(session, input_text)
+
+    if not user_model:
+        await message.answer(_(
+            "admin_user_not_found",
+            default="❌ Пользователь не найден: {input}",
+            input=hcode(input_text)
+        ))
+        return
+
+    try:
+        # Check if user is not banned
+        if not user_model.is_banned:
+            await message.answer(_(
+                "admin_user_not_banned",
+                default="⚠️ Пользователь не заблокирован"
+            ))
+            await state.clear()
+            return
+
+        # Unban the user
+        await user_dal.update_user(session, user_model.user_id, {"is_banned": False})
+        
+        # Update on panel if user has panel UUID
+        if user_model.panel_user_uuid:
+            await panel_service.update_user_status_on_panel(user_model.panel_user_uuid, True)
+        
+        await session.commit()
+        
+        await message.answer(_(
+            "admin_user_unban_success",
+            default="✅ Пользователь {input} разблокирован",
+            input=hcode(input_text)
+        ))
+        
+    except Exception as e:
+        logging.error(f"Error unbanning user {user_model.user_id}: {e}")
+        await session.rollback()
+        await message.answer(_(
+            "admin_user_unban_error",
+            default="❌ Ошибка разблокировки пользователя"
+        ))
+    
+    await state.clear()
