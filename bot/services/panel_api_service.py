@@ -21,6 +21,14 @@ class PanelApiService:
         self.api_key = settings.PANEL_API_KEY
         self._session: Optional[aiohttp.ClientSession] = None
         self.default_client_ip = "127.0.0.1"
+    
+    async def __aenter__(self):
+        """Context manager entry"""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - automatically close session"""
+        await self.close_session()
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -32,7 +40,7 @@ class PanelApiService:
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
-            logging.info("Panel API service HTTP session closed.")
+            logging.debug("Panel API service HTTP session closed.")
 
     async def close(self):
         """Alias for close_session for API consistency."""
@@ -460,3 +468,25 @@ class PanelApiService:
     async def get_bot_db_last_sync_status(
             self, session: AsyncSession) -> Optional[PanelSyncStatus]:
         return await panel_sync_dal.get_panel_sync_status(session)
+    
+    
+    async def get_system_stats(self) -> Optional[Dict[str, Any]]:
+        """Get system statistics (CPU, memory, users counts)"""
+        response_data = await self._request("GET", "/system/stats", log_full_response=False)
+        if response_data and not response_data.get("error") and "response" in response_data:
+            return response_data.get("response")
+        return None
+    
+    async def get_bandwidth_stats(self) -> Optional[Dict[str, Any]]:
+        """Get bandwidth statistics"""
+        response_data = await self._request("GET", "/system/stats/bandwidth", log_full_response=False)
+        if response_data and not response_data.get("error") and "response" in response_data:
+            return response_data.get("response")
+        return None
+    
+    async def get_nodes_statistics(self) -> Optional[Dict[str, Any]]:
+        """Get nodes statistics"""
+        response_data = await self._request("GET", "/system/stats/nodes", log_full_response=False)
+        if response_data and not response_data.get("error") and "response" in response_data:
+            return response_data.get("response")
+        return None

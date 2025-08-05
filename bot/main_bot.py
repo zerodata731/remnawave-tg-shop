@@ -29,6 +29,7 @@ from bot.middlewares.action_logger_middleware import ActionLoggerMiddleware
 
 from bot.handlers.user import user_router_aggregate
 from bot.handlers.admin import admin_router_aggregate
+from bot.handlers import inline_mode
 from bot.filters.admin_filter import AdminFilter
 
 from bot.services.yookassa_service import YooKassaService
@@ -78,6 +79,9 @@ class DBSessionMiddleware(BaseMiddleware):
 
 async def register_all_routers(dp: Dispatcher, settings: Settings):
     dp.include_router(user_router_aggregate)
+    
+    # Add inline mode router (available for all users)
+    dp.include_router(inline_mode.router)
 
     admin_main_router = Router(name="admin_main_filtered_router")
     admin_filter_instance = AdminFilter(admin_ids=settings.ADMIN_IDS)

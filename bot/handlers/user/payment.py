@@ -20,7 +20,7 @@ from bot.services.panel_api_service import PanelApiService
 from bot.services.yookassa_service import YooKassaService
 from bot.middlewares.i18n import JsonI18n
 from config.settings import Settings
-from bot.services.notification_service import notify_admin_new_payment
+from bot.services.notification_service import NotificationService
 from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
 
 payment_processing_lock = asyncio.Lock()
@@ -195,14 +195,20 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
                 f"Failed to send payment details message to user {user_id}: {e_notify}"
             )
 
-        await notify_admin_new_payment(
-            bot,
-            settings,
-            i18n,
-            user_id,
-            subscription_months,
-            payment_value,
-        )
+        # Send notification about payment
+        try:
+            notification_service = NotificationService(bot, settings, i18n)
+            user = await user_dal.get_user_by_id(session, user_id)
+            await notification_service.notify_payment_received(
+                user_id=user_id,
+                amount=payment_value,
+                currency=settings.DEFAULT_CURRENCY_SYMBOL,
+                months=subscription_months,
+                payment_provider="yookassa",  # This is specifically for YooKassa webhook
+                username=user.username if user else None
+            )
+        except Exception as e:
+            logging.error(f"Failed to send payment notification: {e}")
 
     except Exception as e_process:
         logging.error(

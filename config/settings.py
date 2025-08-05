@@ -1,6 +1,6 @@
 import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, ValidationError, computed_field
+from pydantic import Field, ValidationError, computed_field, field_validator
 from typing import Optional, List, Dict, Any
 
 
@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     TRIBUTE_LINK_6_MONTHS: Optional[str] = Field(default=None)
     TRIBUTE_LINK_12_MONTHS: Optional[str] = Field(default=None)
     TRIBUTE_API_KEY: Optional[str] = Field(default=None)
+    TRIBUTE_SKIP_NOTIFICATIONS: bool = Field(default=True, description="Skip renewal notifications for Tribute payments")
+    TRIBUTE_SKIP_CANCELLATION_NOTIFICATIONS: bool = Field(default=False, description="Skip cancellation notifications for Tribute payments")
     PANEL_WEBHOOK_SECRET: Optional[str] = Field(default=None)
 
     SUBSCRIPTION_NOTIFICATIONS_ENABLED: bool = Field(default=True)
@@ -111,6 +113,12 @@ class Settings(BaseSettings):
     SUBSCRIPTION_MINI_APP_URL: Optional[str] = Field(default=None)
 
     START_COMMAND_DESCRIPTION: Optional[str] = Field(default=None)
+    
+    # Inline mode thumbnail URLs
+    INLINE_REFERRAL_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/1077/1077114.png")
+    INLINE_USER_STATS_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/681/681494.png")
+    INLINE_FINANCIAL_STATS_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/2769/2769339.png")
+    INLINE_SYSTEM_STATS_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/2920/2920277.png")
 
     @computed_field
     @property
@@ -288,6 +296,25 @@ class Settings(BaseSettings):
         if self.REFERRAL_BONUS_DAYS_REFEREE_12_MONTHS is not None:
             bonuses[12] = self.REFERRAL_BONUS_DAYS_REFEREE_12_MONTHS
         return bonuses
+    
+    # Logging Configuration
+    LOG_CHAT_ID: Optional[int] = Field(default=None, description="Telegram chat/group ID for sending notifications")
+    LOG_THREAD_ID: Optional[int] = Field(default=None, description="Thread ID for supergroup messages (optional)")
+    
+    @field_validator('LOG_CHAT_ID', 'LOG_THREAD_ID', mode='before')
+    @classmethod
+    def validate_optional_int_fields(cls, v):
+        """Convert empty strings to None for optional integer fields"""
+        if isinstance(v, str) and v.strip() == '':
+            return None
+        return v
+    
+    # Notification types
+    LOG_NEW_USERS: bool = Field(default=True, description="Send notifications for new user registrations")
+    LOG_PAYMENTS: bool = Field(default=True, description="Send notifications for successful payments")
+    LOG_PROMO_ACTIVATIONS: bool = Field(default=True, description="Send notifications for promo code activations")
+    LOG_TRIAL_ACTIVATIONS: bool = Field(default=True, description="Send notifications for trial activations")
+    LOG_SUSPICIOUS_ACTIVITY: bool = Field(default=True, description="Send notifications for suspicious promo attempts")
 
     model_config = SettingsConfigDict(env_file='.env',
                                       env_file_encoding='utf-8',

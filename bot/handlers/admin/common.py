@@ -6,13 +6,19 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.settings import Settings
-from bot.keyboards.inline.admin_keyboards import get_admin_panel_keyboard
+from bot.keyboards.inline.admin_keyboards import (
+    get_admin_panel_keyboard, get_stats_monitoring_keyboard, 
+    get_user_management_keyboard, get_ban_management_keyboard,
+    get_promo_marketing_keyboard, get_system_functions_keyboard
+)
 from bot.middlewares.i18n import JsonI18n
 from bot.services.panel_api_service import PanelApiService
 from bot.services.subscription_service import SubscriptionService
 
 from . import broadcast as admin_broadcast_handlers
-from . import promo_codes as admin_promo_handlers
+from .promo import create as admin_promo_create_handlers
+from .promo import manage as admin_promo_manage_handlers
+from .promo import bulk as admin_promo_bulk_handlers
 from . import user_management as admin_user_mgmnt_handlers
 from . import statistics as admin_stats_handlers
 from . import sync_admin as admin_sync_handlers
@@ -73,19 +79,26 @@ async def admin_panel_actions_callback_handler(
         await admin_broadcast_handlers.broadcast_message_prompt_handler(
             callback, state, i18n_data, settings, session)
     elif action == "create_promo":
-        await admin_promo_handlers.create_promo_prompt_handler(
+        await admin_promo_create_handlers.create_promo_prompt_handler(
+            callback, state, i18n_data, settings, session)
+    elif action == "create_bulk_promo":
+        await admin_promo_bulk_handlers.create_bulk_promo_prompt_handler(
             callback, state, i18n_data, settings, session)
     elif action == "manage_promos":
-        await admin_promo_handlers.manage_promo_codes_handler(
+        await admin_promo_manage_handlers.manage_promo_codes_handler(
             callback, i18n_data, settings, session)
     elif action == "view_promos":
-        await admin_promo_handlers.view_promo_codes_handler(
+        await admin_promo_manage_handlers.view_promo_codes_handler(
             callback, i18n_data, settings, session)
     elif action == "ban_user_prompt":
         await admin_user_mgmnt_handlers.ban_user_prompt_handler(
             callback, state, i18n_data, settings, session)
     elif action == "unban_user_prompt":
         await admin_user_mgmnt_handlers.unban_user_prompt_handler(
+            callback, state, i18n_data, settings, session)
+    elif action == "users_management":
+        from . import user_management as admin_user_management_handlers
+        await admin_user_management_handlers.user_management_menu_handler(
             callback, state, i18n_data, settings, session)
     elif action == "view_banned":
 
@@ -94,6 +107,9 @@ async def admin_panel_actions_callback_handler(
     elif action == "view_logs_menu":
         await admin_logs_handlers.display_logs_menu(callback, i18n_data,
                                                     settings, session)
+    elif action == "promo_management":
+        await admin_promo_manage_handlers.promo_management_handler(
+            callback, i18n_data, settings, session)
     elif action == "sync_panel":
 
         await admin_sync_handlers.sync_command_handler(
@@ -121,3 +137,58 @@ async def admin_panel_actions_callback_handler(
             f"Unknown admin_action received: {action} from callback {callback.data}"
         )
         await callback.answer(_("admin_unknown_action"), show_alert=True)
+
+
+@router.callback_query(F.data.startswith("admin_section:"))
+async def admin_section_handler(callback: types.CallbackQuery, state: FSMContext, 
+                               settings: Settings, i18n_data: dict, session: AsyncSession):
+    section = callback.data.split(":")[1]
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n:
+        await callback.answer("Language error.", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    if not callback.message:
+        await callback.answer("Error: message context lost.", show_alert=True)
+        return
+
+    try:
+        if section == "stats_monitoring":
+            await callback.message.edit_text(
+                _("admin_stats_and_monitoring_section"),
+                reply_markup=get_stats_monitoring_keyboard(i18n, current_lang)
+            )
+        elif section == "user_management":
+            await callback.message.edit_text(
+                _("admin_user_management_section"),
+                reply_markup=get_user_management_keyboard(i18n, current_lang)
+            )
+        elif section == "ban_management":
+            await callback.message.edit_text(
+                _("admin_ban_management_section"),
+                reply_markup=get_ban_management_keyboard(i18n, current_lang)
+            )
+        elif section == "promo_marketing":
+            await callback.message.edit_text(
+                _("admin_promo_marketing_section"),
+                reply_markup=get_promo_marketing_keyboard(i18n, current_lang)
+            )
+        elif section == "system_functions":
+            await callback.message.edit_text(
+                _("admin_system_functions_section"),
+                reply_markup=get_system_functions_keyboard(i18n, current_lang)
+            )
+        else:
+            await callback.answer(_("admin_unknown_action"), show_alert=True)
+            return
+            
+        await callback.answer()
+    except Exception as e:
+        logging.error(f"Error handling admin section {section}: {e}")
+        await callback.message.answer(
+            _("error_occurred_try_again"),
+            reply_markup=get_admin_panel_keyboard(i18n, current_lang, settings)
+        )
+        await callback.answer()

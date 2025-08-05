@@ -129,6 +129,8 @@ async def start_command_handler(message: types.Message,
     user_id = user.id
 
     referred_by_user_id: Optional[int] = None
+    promo_code_to_apply: Optional[str] = None
+    
     if command and command.args:
         arg_payload = command.args
         if arg_payload.startswith("ref_"):
@@ -141,6 +143,14 @@ async def start_command_handler(message: types.Message,
             except (IndexError, ValueError) as e:
                 logging.warning(
                     f"Could not parse referral from /start args '{arg_payload}': {e}"
+                )
+        elif arg_payload.startswith("promo_"):
+            try:
+                promo_code_to_apply = arg_payload.split("_")[1]
+                logging.info(f"User {user_id} started with promo code: {promo_code_to_apply}")
+            except (IndexError, ValueError) as e:
+                logging.warning(
+                    f"Could not parse promo code from /start args '{arg_payload}': {e}"
                 )
 
     db_user = await user_dal.get_user_by_id(session, user_id)
@@ -160,6 +170,19 @@ async def start_command_handler(message: types.Message,
             logging.info(
                 f"New user {user_id} added to session. Referred by: {referred_by_user_id or 'N/A'}."
             )
+            
+            # Send notification about new user registration
+            try:
+                from bot.services.notification_service import NotificationService
+                notification_service = NotificationService(message.bot, settings, i18n)
+                await notification_service.notify_new_user_registration(
+                    user_id=user_id,
+                    username=user.username,
+                    first_name=user.first_name,
+                    referred_by_id=referred_by_user_id
+                )
+            except Exception as e:
+                logging.error(f"Failed to send new user notification: {e}")
         except Exception as e_create:
 
             logging.error(
@@ -194,6 +217,52 @@ async def start_command_handler(message: types.Message,
                     exc_info=True)
 
     await message.answer(_(key="welcome", user_name=hd.quote(user.full_name)))
+    
+    # Auto-apply promo code if provided via start parameter
+    if promo_code_to_apply:
+        try:
+            from bot.services.promo_code_service import PromoCodeService
+            promo_code_service = PromoCodeService()
+            
+            success, result = await promo_code_service.apply_promo_code(
+                session, user_id, promo_code_to_apply, current_lang
+            )
+            
+            if success:
+                await session.commit()
+                logging.info(f"Auto-applied promo code '{promo_code_to_apply}' for user {user_id}")
+                
+                # Get updated subscription details
+                active = await subscription_service.get_active_subscription_details(session, user_id)
+                config_link = active.get("config_link") if active else None
+                config_link = config_link or _("config_link_not_available")
+                
+                new_end_date = result if isinstance(result, datetime) else None
+                
+                promo_success_text = _(
+                    "promo_code_applied_success_full",
+                    end_date=(new_end_date.strftime("%d.%m.%Y %H:%M:%S") if new_end_date else "N/A"),
+                    config_link=config_link,
+                )
+                
+                from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
+                await message.answer(
+                    promo_success_text,
+                    reply_markup=get_connect_and_main_keyboard(current_lang, i18n, settings, config_link),
+                    parse_mode="HTML"
+                )
+                
+                # Don't show main menu if promo was successfully applied
+                return
+            else:
+                await session.rollback()
+                logging.warning(f"Failed to auto-apply promo code '{promo_code_to_apply}' for user {user_id}: {result}")
+                # Continue to show main menu if promo failed
+                
+        except Exception as e:
+            logging.error(f"Error auto-applying promo code '{promo_code_to_apply}' for user {user_id}: {e}")
+            await session.rollback()
+    
     await send_main_menu(message,
                          settings,
                          i18n_data,

@@ -38,14 +38,6 @@ async def create_payment_record(session: AsyncSession,
     return new_payment
 
 
-async def get_payment_by_yookassa_id(
-        session: AsyncSession, yookassa_payment_id: str) -> Optional[Payment]:
-    stmt = select(Payment).where(
-        Payment.yookassa_payment_id == yookassa_payment_id)
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
-
-
 async def get_payment_by_provider_payment_id(
         session: AsyncSession, provider_payment_id: str) -> Optional[Payment]:
     """Fetch a payment by provider-specific identifier."""
@@ -60,15 +52,6 @@ async def get_payment_by_db_id(session: AsyncSession,
 
     stmt = select(Payment).where(Payment.payment_id == payment_db_id).options(
         selectinload(Payment.user), selectinload(Payment.promo_code_used))
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
-
-
-async def get_payment_by_db_id_with_promo(
-        session: AsyncSession, payment_db_id: int) -> Optional[Payment]:
-
-    stmt = select(Payment).where(Payment.payment_id == payment_db_id).options(
-        selectinload(Payment.promo_code_used))
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -92,38 +75,6 @@ async def update_payment_status_by_db_id(
     else:
         logging.warning(
             f"Payment record with DB ID {payment_db_id} not found for status update."
-        )
-    return payment
-
-
-async def user_has_successful_payment_for_provider(
-        session: AsyncSession, user_id: int, provider: str) -> bool:
-    """Check if a user has at least one successful payment for the provider."""
-
-    stmt = (select(Payment.payment_id)
-            .where(Payment.user_id == user_id,
-                   Payment.provider == provider,
-                   Payment.status == 'succeeded')
-            .limit(1))
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none() is not None
-
-
-async def update_payment_status_by_yk_id(session: AsyncSession,
-                                         yookassa_payment_id: str,
-                                         new_status: str) -> Optional[Payment]:
-    payment = await get_payment_by_yookassa_id(session, yookassa_payment_id)
-    if payment:
-        payment.status = new_status
-        payment.updated_at = func.now()
-        await session.flush()
-        await session.refresh(payment)
-        logging.info(
-            f"Payment record with YK ID {yookassa_payment_id} status updated to {new_status}."
-        )
-    else:
-        logging.warning(
-            f"Payment record with YK ID {yookassa_payment_id} not found for status update."
         )
     return payment
 
@@ -155,3 +106,81 @@ async def update_provider_payment_and_status(
             f"Payment record with DB ID {payment_db_id} not found for provider update."
         )
     return payment
+
+
+async def get_financial_statistics(session: AsyncSession) -> Dict[str, Any]:
+    """Get comprehensive financial statistics."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import and_, text
+    
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=7)
+    month_start = today_start - timedelta(days=30)
+    
+    # Today's revenue
+    stmt_today = select(func.sum(Payment.amount)).where(
+        and_(
+            Payment.status == 'succeeded',
+            Payment.created_at >= today_start
+        )
+    )
+    today_revenue = await session.execute(stmt_today)
+    today_amount = today_revenue.scalar() or 0
+    
+    # Week revenue
+    stmt_week = select(func.sum(Payment.amount)).where(
+        and_(
+            Payment.status == 'succeeded',
+            Payment.created_at >= week_start
+        )
+    )
+    week_revenue = await session.execute(stmt_week)
+    week_amount = week_revenue.scalar() or 0
+    
+    # Month revenue
+    stmt_month = select(func.sum(Payment.amount)).where(
+        and_(
+            Payment.status == 'succeeded',
+            Payment.created_at >= month_start
+        )
+    )
+    month_revenue = await session.execute(stmt_month)
+    month_amount = month_revenue.scalar() or 0
+    
+    # All time revenue
+    stmt_all = select(func.sum(Payment.amount)).where(Payment.status == 'succeeded')
+    all_revenue = await session.execute(stmt_all)
+    all_amount = all_revenue.scalar() or 0
+    
+    # Count of successful payments today
+    stmt_count_today = select(func.count(Payment.payment_id)).where(
+        and_(
+            Payment.status == 'succeeded',
+            Payment.created_at >= today_start
+        )
+    )
+    today_count = await session.execute(stmt_count_today)
+    today_payments_count = today_count.scalar() or 0
+    
+    return {
+        "today_revenue": float(today_amount),
+        "week_revenue": float(week_amount),
+        "month_revenue": float(month_amount),
+        "all_time_revenue": float(all_amount),
+        "today_payments_count": today_payments_count
+    }
+
+
+async def get_last_tribute_payment_duration(session: AsyncSession, user_id: int) -> Optional[int]:
+    """Get duration in months from the last successful tribute payment for a user."""
+    stmt = select(Payment.subscription_duration_months).where(
+        and_(
+            Payment.user_id == user_id,
+            Payment.provider == 'tribute',
+            Payment.status == 'succeeded'
+        )
+    ).order_by(Payment.created_at.desc()).limit(1)
+    
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()

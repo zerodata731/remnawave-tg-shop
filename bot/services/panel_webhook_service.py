@@ -41,6 +41,70 @@ class PanelWebhookService:
         except Exception as e:
             logging.error(f"Failed to send notification to {user_id}: {e}")
 
+    async def _handle_expired_subscription(self, session, user_id: int, user_payload: dict, 
+                                         lang: str, markup, first_name: str):
+        """Handle expired subscription - auto-renew tribute users if no cancellation was received"""
+        from db.dal import subscription_dal, payment_dal
+        from datetime import datetime, timezone, timedelta
+        
+        try:
+            # Check if user has tribute subscriptions that weren't cancelled
+            user_subs = await subscription_dal.get_active_subscriptions_for_user(session, user_id)
+            
+            for sub in user_subs:
+                # Check if this subscription was marked as cancelled (from tribute cancellation webhook)
+                if sub.status_from_panel == 'CANCELLED':
+                    logging.info(f"Subscription {sub.subscription_id} for user {user_id} was cancelled, skipping auto-renewal")
+                    continue
+                    
+                # Check if this user has tribute payments
+                last_tribute_duration = await payment_dal.get_last_tribute_payment_duration(session, user_id)
+                
+                if last_tribute_duration is not None:
+                    # This user has tribute payments, auto-renew for the same duration
+                    logging.info(f"Auto-renewing tribute subscription for user {user_id} for {last_tribute_duration} months")
+                    
+                    # Extend subscription by the last payment duration
+                    new_end_date = datetime.now(timezone.utc) + timedelta(days=last_tribute_duration * 30)
+                    
+                    await subscription_dal.update_subscription(
+                        session,
+                        sub.subscription_id,
+                        {
+                            'end_date': new_end_date,
+                            'status_from_panel': 'ACTIVE',
+                            'is_active': True
+                        }
+                    )
+                    
+                    # Send auto-renewal notification
+                    _ = lambda k, **kw: self.i18n.gettext(lang, k, **kw) if self.i18n else k
+                    auto_renewal_msg = _(
+                        "tribute_auto_renewal",
+                        default="🔄 <b>Подписка автоматически продлена</b>\n\n"
+                               "Ваша подписка Tribute была автоматически продлена на {months} мес.\n"
+                               "Новая дата окончания: {end_date}",
+                        user_name=first_name,
+                        months=last_tribute_duration,
+                        end_date=new_end_date.strftime('%Y-%m-%d')
+                    )
+                    
+                    try:
+                        await self.bot.send_message(
+                            user_id,
+                            auto_renewal_msg,
+                            reply_markup=markup,
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        logging.error(f"Failed to send auto-renewal notification to user {user_id}: {e}")
+                        
+            await session.commit()
+            
+        except Exception as e:
+            logging.error(f"Error handling expired subscription for user {user_id}: {e}")
+            await session.rollback()
+
     async def handle_event(self, event_name: str, user_payload: dict):
         telegram_id = user_payload.get("telegramId")
         if not telegram_id:
@@ -70,6 +134,9 @@ class PanelWebhookService:
                     end_date=user_payload.get("expireAt", "")[:10],
                 )
         elif event_name == "user.expired" and self.settings.SUBSCRIPTION_NOTIFY_ON_EXPIRE:
+            # Check if this is a tribute user that should be auto-renewed
+            await self._handle_expired_subscription(session, user_id, user_payload, lang, markup, first_name)
+            
             await self._send_message(
                 user_id,
                 lang,
