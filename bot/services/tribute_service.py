@@ -201,9 +201,74 @@ class TributeService:
                     )
                 except Exception as e:
                     logging.error(f"Failed to send tribute payment notification: {e}")
+                    
+            elif event_name == 'subscription_cancelled':
+                # Handle tribute subscription cancellation
+                await self._handle_tribute_cancellation(session, user_id, bot, i18n)
+                
             else:
                 await session.commit()
         return web.Response(status=200, text="ok")
+
+    async def _handle_tribute_cancellation(self, session, user_id: int, bot: Bot, i18n: JsonI18n):
+        """Handle tribute subscription cancellation - set subscription to 1 day grace period"""
+        from datetime import datetime, timezone, timedelta
+        from db.dal import subscription_dal, user_dal
+        from bot.keyboards.inline.user_keyboards import get_subscribe_only_markup
+        
+        try:
+            # Set all user's subscriptions to expire in 1 day (grace period)
+            grace_end_date = datetime.now(timezone.utc) + timedelta(days=1)
+            
+            # Get all active subscriptions for the user
+            user_subs = await subscription_dal.get_active_subscriptions_for_user(session, user_id)
+            
+            for sub in user_subs:
+                await subscription_dal.update_subscription(
+                    session, 
+                    sub.subscription_id, 
+                    {
+                        'end_date': grace_end_date,
+                        'status_from_panel': 'CANCELLED',
+                        'skip_notifications': True  # Skip future notifications for cancelled subs
+                    }
+                )
+            
+            await session.commit()
+            
+            # Send notification about cancellation if enabled
+            if not self.settings.TRIBUTE_SKIP_CANCELLATION_NOTIFICATIONS:
+                db_user = await user_dal.get_user_by_id(session, user_id)
+                lang = db_user.language_code if db_user and db_user.language_code else self.settings.DEFAULT_LANGUAGE
+                first_name = db_user.first_name or f"User {user_id}" if db_user else f"User {user_id}"
+                
+                _ = lambda k, **kw: i18n.gettext(lang, k, **kw) if i18n else k
+                markup = get_subscribe_only_markup(lang, i18n)
+                
+                cancellation_msg = _(
+                    "tribute_subscription_cancelled",
+                    default="🚨 <b>Подписка отменена</b>\n\n"
+                           "Ваша подписка Tribute была отменена. У вас есть 24 часа для восстановления доступа, "
+                           "после чего подписка будет заблокирована.\n\n"
+                           "Для продления подписки нажмите кнопку ниже.",
+                    user_name=first_name
+                )
+                
+                try:
+                    await bot.send_message(
+                        user_id,
+                        cancellation_msg,
+                        reply_markup=markup,
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to send tribute cancellation notification to user {user_id}: {e}")
+                    
+            logging.info(f"Tribute subscription cancelled for user {user_id}, grace period set to 1 day")
+            
+        except Exception as e:
+            logging.error(f"Error handling tribute cancellation for user {user_id}: {e}")
+            await session.rollback()
 
 
 async def tribute_webhook_route(request: web.Request):

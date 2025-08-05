@@ -170,3 +170,17 @@ async def get_financial_statistics(session: AsyncSession) -> Dict[str, Any]:
         "all_time_revenue": float(all_amount),
         "today_payments_count": today_payments_count
     }
+
+
+async def get_last_tribute_payment_duration(session: AsyncSession, user_id: int) -> Optional[int]:
+    """Get duration in months from the last successful tribute payment for a user."""
+    stmt = select(Payment.subscription_duration_months).where(
+        and_(
+            Payment.user_id == user_id,
+            Payment.provider == 'tribute',
+            Payment.status == 'succeeded'
+        )
+    ).order_by(Payment.created_at.desc()).limit(1)
+    
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()

@@ -232,6 +232,8 @@
   "subscription_24h_notification": "👋 Hi, {user_name}!\n\n⏳ Your VPN subscription expires in 1 day — {end_date}.\n\nPlease renew it using the button below.",
   "subscription_expired_notification": "👋 Hi, {user_name}!\n\n⛔ Your VPN subscription expired on {end_date}.\n\nPlease renew it using the button below.",
   "subscription_expired_yesterday_notification": "👋 Hi, {user_name}!\n\n⏳ Your VPN subscription expired yesterday ({end_date}).\n\nPlease renew it using the button below.",
+  "tribute_subscription_cancelled": "🚨 <b>Subscription Cancelled</b>\n\nYour Tribute subscription has been cancelled. You have 24 hours to restore access, after which the subscription will be blocked.\n\nTo renew your subscription, press the button below.",
+  "tribute_auto_renewal": "🔄 <b>Subscription Auto-Renewed</b>\n\nYour Tribute subscription has been automatically renewed for {months} months.\nNew expiration date: {end_date}",
 
   "admin_new_trial_notification": "\ud83c\udf21 User {user_id} activated a free trial until {end_date}.",
 

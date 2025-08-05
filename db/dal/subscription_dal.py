@@ -31,6 +31,16 @@ async def get_subscription_by_panel_subscription_uuid(
     return result.scalar_one_or_none()
 
 
+async def get_active_subscriptions_for_user(session: AsyncSession, user_id: int) -> List[Subscription]:
+    """Get all active subscriptions for a user."""
+    stmt = select(Subscription).where(
+        Subscription.user_id == user_id,
+        Subscription.is_active == True
+    ).order_by(Subscription.end_date.desc())
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
 async def update_subscription(
         session: AsyncSession, subscription_id: int,
         update_data: Dict[str, Any]) -> Optional[Subscription]:
