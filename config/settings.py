@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     TRIBUTE_LINK_12_MONTHS: Optional[str] = Field(default=None)
     TRIBUTE_API_KEY: Optional[str] = Field(default=None)
     TRIBUTE_SKIP_NOTIFICATIONS: bool = Field(default=True, description="Skip renewal notifications for Tribute payments")
+    TRIBUTE_SKIP_CANCELLATION_NOTIFICATIONS: bool = Field(default=False, description="Skip cancellation notifications for Tribute payments")
     PANEL_WEBHOOK_SECRET: Optional[str] = Field(default=None)
 
     SUBSCRIPTION_NOTIFICATIONS_ENABLED: bool = Field(default=True)
