@@ -10,7 +10,6 @@ from db.models import PromoCode, PromoCodeActivation, User, Payment
 
 async def create_promo_code(session: AsyncSession,
                             promo_data: Dict[str, Any]) -> PromoCode:
-
     new_promo = PromoCode(**promo_data)
     session.add(new_promo)
     await session.flush()
@@ -65,22 +64,23 @@ async def get_all_promo_codes_with_details(session: AsyncSession, limit: int = 5
     return result.scalars().all()
 
 
-async def get_promo_code_by_id(session: AsyncSession, promo_id: int) -> Optional[PromoCode]:
-    """Get promo code by ID"""
-    stmt = select(PromoCode).where(PromoCode.promo_code_id == promo_id)
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
-
-
-async def get_promo_activations_by_code_id(session: AsyncSession, promo_code_id: int) -> List:
-    """Get activation history for a specific promo code"""
-    from db.models import PromoCodeActivation
+async def get_promo_activations_by_code_id(session: AsyncSession, promo_code_id: int, limit: Optional[int] = None, offset: int = 0) -> List[PromoCodeActivation]:
+    """Get activation history for a specific promo code with optional pagination."""
     stmt = (select(PromoCodeActivation)
             .where(PromoCodeActivation.promo_code_id == promo_code_id)
             .order_by(PromoCodeActivation.activated_at.desc())
-            .limit(50))  # Limit to last 50 activations
+            .offset(offset))
+    if limit is not None:
+        stmt = stmt.limit(limit)
     result = await session.execute(stmt)
     return result.scalars().all()
+
+
+async def count_promo_activations_by_code_id(session: AsyncSession, promo_code_id: int) -> int:
+    """Count total activations for a specific promo code."""
+    stmt = select(func.count()).select_from(PromoCodeActivation).where(PromoCodeActivation.promo_code_id == promo_code_id)
+    result = await session.execute(stmt)
+    return result.scalar_one()
 
 
 async def update_promo_code(session: AsyncSession, promo_id: int,
@@ -99,6 +99,11 @@ async def delete_promo_code(session: AsyncSession, promo_id: int) -> Optional[Pr
     promo = await get_promo_code_by_id(session, promo_id)
     if not promo:
         return None
+    # First, delete related activations due to foreign key constraint
+    activations = await get_promo_activations_by_code_id(session, promo_id)
+    for activation in activations:
+        await session.delete(activation)
+    
     await session.delete(promo)
     await session.flush()
     return promo
@@ -124,7 +129,6 @@ async def increment_promo_code_usage(
 async def get_user_activation_for_promo(
         session: AsyncSession, promo_code_id: int,
         user_id: int) -> Optional[PromoCodeActivation]:
-
     stmt = select(PromoCodeActivation).where(
         PromoCodeActivation.promo_code_id == promo_code_id,
         PromoCodeActivation.user_id == user_id).limit(1)
@@ -137,7 +141,6 @@ async def record_promo_activation(
         promo_code_id: int,
         user_id: int,
         payment_id: Optional[int] = None) -> Optional[PromoCodeActivation]:
-
     existing_activation = await get_user_activation_for_promo(
         session, promo_code_id, user_id)
     if existing_activation:
@@ -162,7 +165,6 @@ async def record_promo_activation(
             logging.error(
                 f"Cannot record promo activation: Payment {payment_id} not found."
             )
-
             return None
 
     activation_data = {
