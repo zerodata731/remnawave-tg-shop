@@ -31,29 +31,6 @@ async def get_subscription_by_panel_subscription_uuid(
     return result.scalar_one_or_none()
 
 
-async def create_subscription(session: AsyncSession,
-                              sub_data: Dict[str, Any]) -> Subscription:
-    from .user_dal import get_user_by_id
-
-    if "user_id" not in sub_data or sub_data["user_id"] is None:
-        raise ValueError(
-            "user_id is required to create a subscription directly.")
-    user = await get_user_by_id(session, sub_data["user_id"])
-    if not user:
-        raise ValueError(
-            f"User with id {sub_data['user_id']} not found for creating subscription."
-        )
-
-    new_sub = Subscription(**sub_data)
-    session.add(new_sub)
-    await session.flush()
-    await session.refresh(new_sub)
-    logging.info(
-        f"Subscription {new_sub.subscription_id} created for user {new_sub.user_id}"
-    )
-    return new_sub
-
-
 async def update_subscription(
         session: AsyncSession, subscription_id: int,
         update_data: Dict[str, Any]) -> Optional[Subscription]:
@@ -205,17 +182,6 @@ async def update_subscription_notification_time(
         {"last_notification_sent": notification_time})
 
 
-async def get_user_active_subscription_end_date_str(
-        session: AsyncSession, user_id: int) -> Optional[str]:
-    stmt = (select(Subscription.end_date).where(
-        Subscription.user_id == user_id, Subscription.is_active == True,
-        Subscription.end_date > datetime.now(timezone.utc)).order_by(
-            Subscription.end_date.desc()).limit(1))
-    result = await session.execute(stmt)
-    end_date_obj = result.scalar_one_or_none()
-    return end_date_obj.strftime('%Y-%m-%d') if end_date_obj else None
-
-
 async def find_subscription_for_notification_update(
         session: AsyncSession, user_id: int,
         subscription_end_date_to_match: datetime) -> Optional[Subscription]:
@@ -234,34 +200,4 @@ async def find_subscription_for_notification_update(
     return result.scalar_one_or_none()
 
 
-async def set_skip_notifications_for_provider(
-        session: AsyncSession, user_id: int, provider: str,
-        skip: bool) -> int:
-    stmt = (update(Subscription).where(
-        Subscription.user_id == user_id,
-        Subscription.is_active == True,
-        Subscription.provider == provider).values(skip_notifications=skip))
-    result = await session.execute(stmt)
-    return result.rowcount
 
-
-async def get_active_subscriptions_for_autorenew(
-        session: AsyncSession, provider: str,
-        days_threshold: int = 1,
-        require_skip_flag: bool = True) -> List[Subscription]:
-    """Fetch active subscriptions nearing expiration for auto-renew logic."""
-
-    now_utc = datetime.now(timezone.utc)
-    threshold_date = now_utc + timedelta(days=days_threshold)
-
-    conditions = [
-        Subscription.provider == provider,
-        Subscription.is_active == True,
-        Subscription.end_date <= threshold_date,
-    ]
-    if require_skip_flag:
-        conditions.append(Subscription.skip_notifications == True)
-
-    stmt = select(Subscription).where(*conditions)
-    result = await session.execute(stmt)
-    return result.scalars().all()

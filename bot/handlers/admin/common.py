@@ -16,7 +16,9 @@ from bot.services.panel_api_service import PanelApiService
 from bot.services.subscription_service import SubscriptionService
 
 from . import broadcast as admin_broadcast_handlers
-from . import promo_codes as admin_promo_handlers
+from .promo import create as admin_promo_create_handlers
+from .promo import manage as admin_promo_manage_handlers
+from .promo import bulk as admin_promo_bulk_handlers
 from . import user_management as admin_user_mgmnt_handlers
 from . import statistics as admin_stats_handlers
 from . import sync_admin as admin_sync_handlers
@@ -77,16 +79,16 @@ async def admin_panel_actions_callback_handler(
         await admin_broadcast_handlers.broadcast_message_prompt_handler(
             callback, state, i18n_data, settings, session)
     elif action == "create_promo":
-        await admin_promo_handlers.create_promo_prompt_handler(
+        await admin_promo_create_handlers.create_promo_prompt_handler(
             callback, state, i18n_data, settings, session)
     elif action == "create_bulk_promo":
-        await admin_promo_handlers.create_bulk_promo_prompt_handler(
+        await admin_promo_bulk_handlers.create_bulk_promo_prompt_handler(
             callback, state, i18n_data, settings, session)
     elif action == "manage_promos":
-        await admin_promo_handlers.manage_promo_codes_handler(
+        await admin_promo_manage_handlers.manage_promo_codes_handler(
             callback, i18n_data, settings, session)
     elif action == "view_promos":
-        await admin_promo_handlers.view_promo_codes_handler(
+        await admin_promo_manage_handlers.view_promo_codes_handler(
             callback, i18n_data, settings, session)
     elif action == "ban_user_prompt":
         await admin_user_mgmnt_handlers.ban_user_prompt_handler(
@@ -106,7 +108,7 @@ async def admin_panel_actions_callback_handler(
         await admin_logs_handlers.display_logs_menu(callback, i18n_data,
                                                     settings, session)
     elif action == "promo_management":
-        await admin_promo_handlers.promo_management_handler(
+        await admin_promo_manage_handlers.promo_management_handler(
             callback, i18n_data, settings, session)
     elif action == "sync_panel":
 
