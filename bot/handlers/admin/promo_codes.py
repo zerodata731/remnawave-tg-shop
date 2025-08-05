@@ -369,11 +369,11 @@ async def create_promo_code_final(callback_or_message,
         # Send success message
         success_text = _(
             "admin_promo_created_success",
-            default="✅ Промокод создан!\n\n🎟 Код: <b>{code}</b>\n🎁 Бонусные дни: <b>{days}</b>\n🔢 Максимальные активации: <b>{max_act}</b>\n⏰ Действует до: <b>{validity}</b>",
+            default="✅ Промокод создан!\n\n🎟 Код: <b>{code}</b>\n🎁 Бонусные дни: <b>{bonus_days}</b>\n🔢 Максимальные активации: <b>{max_activations}</b>\n⏰ Действует до: <b>{valid_until_str}</b>",
             code=promo_code,
-            days=bonus_days,
-            max_act=max_activations,
-            validity=valid_until_str_display
+            bonus_days=bonus_days,
+            max_activations=max_activations,
+            valid_until_str=valid_until_str_display
         )
         
         if hasattr(callback_or_message, 'message'):
