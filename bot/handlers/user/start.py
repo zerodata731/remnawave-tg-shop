@@ -224,7 +224,7 @@ async def start_command_handler(message: types.Message,
     if promo_code_to_apply:
         try:
             from bot.services.promo_code_service import PromoCodeService
-            promo_code_service = PromoCodeService(settings, subscription_service, bot, i18n)
+            promo_code_service = PromoCodeService(settings, subscription_service, message.bot, i18n)
             
             success, result = await promo_code_service.apply_promo_code(
                 session, user_id, promo_code_to_apply, current_lang

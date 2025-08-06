@@ -439,8 +439,19 @@ async def create_bulk_promo_codes_final(callback_or_message,
                 "Команда для старта", "Ссылка для активации"
             ])
             
-            # Add bot username from settings
-            bot_username = getattr(settings, 'BOT_USERNAME', 'your_bot')
+            # Get real bot username
+            bot_username = 'your_bot'  # fallback
+            try:
+                if hasattr(callback_or_message, 'message'):
+                    bot = callback_or_message.message.bot
+                else:
+                    bot = callback_or_message.bot
+                
+                bot_info = await bot.get_me()
+                bot_username = bot_info.username or 'your_bot'
+            except Exception as e:
+                logging.error(f"Failed to get bot username for CSV links: {e}")
+                bot_username = 'your_bot'
             
             for code in created_codes:
                 # Determine validity info
