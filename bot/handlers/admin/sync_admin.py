@@ -265,7 +265,7 @@ async def sync_command_handler(
         return
 
     if isinstance(message_event, types.Message):
-        await message_event.answer(_("sync_started"))
+        await message_event.answer(_("sync_started_simple"))
 
     logging.info(f"Admin ({message_event.from_user.id}) triggered panel sync.")
 
@@ -277,27 +277,13 @@ async def sync_command_handler(
         details = sync_result.get("details", "No details available")
         errors = sync_result.get("errors", [])
         
+        # Simple confirmation message to admin
         if status == "failed":
-            await bot.send_message(target_chat_id, _("sync_failed", details=details))
+            await bot.send_message(target_chat_id, _("sync_failed_simple"))
         elif status == "completed_with_errors":
-            error_preview = "; ".join(errors[:3])  # Show first 3 errors
-            final_message = _(
-                "sync_completed_with_errors_details",
-                total_checked=sync_result.get("users_processed", 0),
-                users_synced=sync_result.get("users_synced", 0),
-                subs_synced=sync_result.get("subs_synced", 0),
-                errors_count=len(errors),
-                error_details_preview=error_preview
-            )
-            await bot.send_message(target_chat_id, final_message)
+            await bot.send_message(target_chat_id, _("sync_errors_simple", errors_count=len(errors)))
         else:
-            final_message = _(
-                "sync_completed_details",
-                total_checked=sync_result.get("users_processed", 0),
-                users_synced=sync_result.get("users_synced", 0),
-                subs_synced=sync_result.get("subs_synced", 0)
-            )
-            await bot.send_message(target_chat_id, _("sync_completed", status="Success", details=final_message))
+            await bot.send_message(target_chat_id, _("sync_success_simple"))
         
         # Send notification to log channel with proper thread handling
         try:
@@ -311,7 +297,7 @@ async def sync_command_handler(
             
     except Exception as e_sync_global:
         logging.error(f"Global error during /sync command: {e_sync_global}", exc_info=True)
-        await bot.send_message(target_chat_id, _("sync_failed", details=str(e_sync_global)))
+        await bot.send_message(target_chat_id, _("sync_critical_error"))
         
         # Send notification to log channel about failure
         try:
