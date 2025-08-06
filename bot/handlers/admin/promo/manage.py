@@ -39,7 +39,7 @@ async def get_promo_detail_text_and_keyboard(promo_id: int, session: AsyncSessio
     if not promo:
         return None, None
 
-    _, status = get_promo_status_emoji_and_text(promo, i18n, current_lang)
+    status_emoji, status = get_promo_status_emoji_and_text(promo, i18n, current_lang)
 
     validity = _("admin_promo_valid_indefinitely")
     if promo.valid_until:
