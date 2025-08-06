@@ -55,7 +55,6 @@ class PromoCodeService:
             reason=f"promo code {code_input_upper}")
 
         if new_end_date:
-
             activation_recorded = await promo_code_dal.record_promo_activation(
                 session, promo_data.promo_code_id, user_id, payment_id=None)
             promo_incremented = await promo_code_dal.increment_promo_code_usage(
@@ -83,5 +82,4 @@ class PromoCodeService:
                 )
                 return False, _("error_applying_promo_bonus")
         else:
-
             return False, _("error_applying_promo_bonus")

@@ -1,6 +1,8 @@
 import logging
 import random
 import string
+import csv
+import io
 from aiogram import Router, F, types
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
@@ -421,15 +423,52 @@ async def create_bulk_promo_codes_final(callback_or_message,
             )
         )
         
+        # Create CSV file with promo codes if any were created
+        csv_file = None
         if created_codes:
-            success_lines.append("\n🎟 <b>Созданные коды:</b>")
-            # Show first 20 codes, then indicate if there are more
-            codes_to_show = created_codes[:20]
-            for code in codes_to_show:
-                success_lines.append(f"<code>{code}</code>")
+            success_lines.append(f"\n🎟 <b>Создано {len(created_codes)} промокодов</b>")
+            success_lines.append("📄 CSV файл с промокодами отправлен отдельным сообщением")
             
-            if len(created_codes) > 20:
-                success_lines.append(f"... и еще {len(created_codes) - 20} кодов")
+            # Create CSV file
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # CSV headers
+            writer.writerow([
+                "Промокод", "Бонусные дни", "Макс. активации", "Действителен до", 
+                "Команда для старта", "Ссылка для активации"
+            ])
+            
+            # Add bot username from settings
+            bot_username = getattr(settings, 'BOT_USERNAME', 'your_bot')
+            
+            for code in created_codes:
+                # Determine validity info
+                if data.get("validity_days"):
+                    valid_until = (datetime.now(timezone.utc) + timedelta(days=data["validity_days"])).strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    valid_until = "Без ограничений"
+                
+                start_command = f"/start promo_{code}"
+                telegram_link = f"https://t.me/{bot_username}?start=promo_{code}"
+                
+                writer.writerow([
+                    code,
+                    data["bonus_days"],
+                    data["max_activations"], 
+                    valid_until,
+                    start_command,
+                    telegram_link
+                ])
+            
+            output.seek(0)
+            
+            # Create file for sending
+            filename = f"bulk_promo_codes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            csv_file = types.BufferedInputFile(
+                output.getvalue().encode('utf-8-sig'),  # BOM for correct Excel display
+                filename=filename
+            )
         
         if failed_codes:
             success_lines.append(f"\n❌ <b>Ошибки ({len(failed_codes)}):</b>")
@@ -447,18 +486,25 @@ async def create_bulk_promo_codes_final(callback_or_message,
                     reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
                     parse_mode="HTML"
                 )
+                message_obj = callback_or_message.message
             except Exception:
-                await callback_or_message.message.answer(
+                message_obj = await callback_or_message.message.answer(
                     success_text,
                     reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
                     parse_mode="HTML"
                 )
+            await callback_or_message.answer()
         else:  # Message
-            await callback_or_message.answer(
+            message_obj = await callback_or_message.answer(
                 success_text,
                 reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
                 parse_mode="HTML"
             )
+        
+        # Send CSV file if created
+        if csv_file:
+            csv_caption = f"📄 Промокоды для массового создания\n💫 Всего: {len(created_codes)} промокодов\n🎁 Бонус: {data['bonus_days']} дней каждый"
+            await message_obj.answer_document(csv_file, caption=csv_caption)
         
         await state.clear()
         
