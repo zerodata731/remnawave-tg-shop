@@ -84,8 +84,7 @@ async def process_broadcast_message_handler(
         broadcast_entities=entities,
     )
 
-    preview_snippet = (text[:200] + "...") if len(text) > 200 else text
-    confirmation_prompt = _("admin_broadcast_confirm_prompt", message_preview=preview_snippet)
+    confirmation_prompt = _("admin_broadcast_confirm_prompt", message_preview=text)
 
     await message.answer(
         confirmation_prompt,

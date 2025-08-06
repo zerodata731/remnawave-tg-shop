@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from config.settings import Settings
 from bot.services.panel_api_service import PanelApiService
+from bot.services.notification_service import notify_admin_panel_sync
 
 from db.dal import user_dal, subscription_dal, panel_sync_dal
 
@@ -222,7 +223,7 @@ async def perform_sync(panel_service: PanelApiService, session: AsyncSession,
     except Exception as e_sync_global:
         await session.rollback()
         logging.error(f"Global error during sync: {e_sync_global}", exc_info=True)
-        error_detail = f"Unexpected error during sync: {str(e_sync_global)[:200]}"
+        error_detail = f"Unexpected error during sync: {str(e_sync_global)}"
         
         await panel_sync_dal.update_panel_sync_status(
             session, "failed", error_detail, panel_records_checked, subscriptions_synced_count
@@ -286,7 +287,7 @@ async def sync_command_handler(
                 users_synced=sync_result.get("users_synced", 0),
                 subs_synced=sync_result.get("subs_synced", 0),
                 errors_count=len(errors),
-                error_details_preview=error_preview[:200] + "..." if len(error_preview) > 200 else error_preview
+                error_details_preview=error_preview
             )
             await bot.send_message(target_chat_id, final_message)
         else:
@@ -297,10 +298,28 @@ async def sync_command_handler(
                 subs_synced=sync_result.get("subs_synced", 0)
             )
             await bot.send_message(target_chat_id, _("sync_completed", status="Success", details=final_message))
+        
+        # Send notification to log channel with proper thread handling
+        try:
+            await notify_admin_panel_sync(
+                bot, settings, i18n, status, details,
+                sync_result.get("users_processed", 0),
+                sync_result.get("subs_synced", 0)
+            )
+        except Exception as e_notification:
+            logging.error(f"Failed to send sync notification: {e_notification}")
             
     except Exception as e_sync_global:
         logging.error(f"Global error during /sync command: {e_sync_global}", exc_info=True)
         await bot.send_message(target_chat_id, _("sync_failed", details=str(e_sync_global)))
+        
+        # Send notification to log channel about failure
+        try:
+            await notify_admin_panel_sync(
+                bot, settings, i18n, "failed", str(e_sync_global), 0, 0
+            )
+        except Exception as e_notification:
+            logging.error(f"Failed to send sync failure notification: {e_notification}")
 
 
 @router.message(Command("syncstatus"))
@@ -323,11 +342,7 @@ async def sync_status_command_handler(
         )
 
         details_val = status_record_model.details
-        details_str = (
-            (details_val[:200] + "...")
-            if details_val and len(details_val) > 200
-            else (details_val or "N/A")
-        )
+        details_str = details_val or "N/A"
 
         response_text = (
             f"<b>{_('admin_stats_last_sync_header')}</b>\n"
