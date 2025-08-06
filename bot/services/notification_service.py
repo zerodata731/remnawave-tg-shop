@@ -221,6 +221,42 @@ class NotificationService:
         # Send to log channel
         await self._send_to_log_channel(message)
 
+    async def notify_panel_sync(self, status: str, details: str, 
+                               users_processed: int, subs_synced: int,
+                               username: Optional[str] = None):
+        """Send notification about panel synchronization"""
+        if not getattr(self.settings, 'LOG_PANEL_SYNC', True):
+            return
+        
+        admin_lang = self.settings.DEFAULT_LANGUAGE
+        _ = lambda k, **kw: self.i18n.gettext(admin_lang, k, **kw) if self.i18n else k
+        
+        # Status emoji based on sync result
+        status_emoji = {
+            "completed": "✅",
+            "completed_with_errors": "⚠️", 
+            "failed": "❌"
+        }.get(status, "🔄")
+        
+        message = _(
+            "log_panel_sync",
+            default="{status_emoji} <b>Синхронизация с панелью</b>\n\n"
+                   "📊 Статус: <b>{status}</b>\n"
+                   "👥 Обработано пользователей: <b>{users_processed}</b>\n"
+                   "📋 Синхронизировано подписок: <b>{subs_synced}</b>\n"
+                   "🕐 Время: {timestamp}\n\n"
+                   "📝 Детали:\n{details}",
+            status_emoji=status_emoji,
+            status=status,
+            users_processed=users_processed,
+            subs_synced=subs_synced,
+            timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            details=details
+        )
+        
+        # Send to log channel 
+        await self._send_to_log_channel(message)
+
     async def notify_suspicious_promo_attempt(
             self, user_id: int, suspicious_input: str,
             username: Optional[str] = None, first_name: Optional[str] = None):
@@ -298,3 +334,12 @@ async def notify_admin_promo_activation(bot: Bot, settings: Settings,
         code=code,
         bonus_days=bonus_days,
     )
+
+
+async def notify_admin_panel_sync(bot: Bot, settings: Settings,
+                                  i18n: JsonI18n, status: str,
+                                  details: str, users_processed: int,
+                                  subs_synced: int) -> None:
+    """Send notification to admins about panel sync (legacy)"""
+    notification_service = NotificationService(bot, settings, i18n)
+    await notification_service.notify_panel_sync(status, details, users_processed, subs_synced)

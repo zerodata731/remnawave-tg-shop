@@ -131,7 +131,7 @@
   "admin_sync_status_never_run": "Panel sync never run.",
 
   "admin_broadcast_enter_message": "Enter the broadcast message (HTML supported):",
-  "admin_broadcast_confirm_prompt": "You are about to send the following message (first 200 characters):\n\n{message_preview}\n\nConfirm sending?",
+  "admin_broadcast_confirm_prompt": "You are about to send the following message:\n\n{message_preview}\n\nConfirm sending?",
   "confirm_broadcast_send_button": "✅ Send",
   "cancel_broadcast_button": "❌ Cancel",
   "admin_broadcast_sending_started": "Starting broadcast...",
@@ -145,6 +145,8 @@
   "admin_promo_create_prompt": "Enter promo details in the format: CODE BONUS_DAYS MAX_USES [VALIDITY_DAYS]\nExample: <code>{example_format}</code>\n(Validity is optional; default is indefinite)",
   "admin_promo_invalid_format": "Invalid format. Please use: CODE BONUS_DAYS MAX_USES [VALIDITY_DAYS]",
   "admin_promo_invalid_code_format": "Code must be 3–30 alphanumeric characters.",
+  "admin_promo_invalid_bonus_days": "Bonus days must be a positive number.",
+  "admin_promo_invalid_max_activations": "Max activations must be a positive number.",
   "admin_promo_invalid_bonus_or_activations": "Bonus days and max uses must be positive numbers.",
   "admin_promo_invalid_validity_days": "Validity period (in days) must be a positive number.",
   "admin_promo_invalid_values": "Invalid values. {error}",
@@ -314,6 +316,7 @@
   "log_payment_received": "{provider_emoji} <b>Payment Received</b>\n\n👤 User: {user_display}\n💰 Amount: <b>{amount} {currency}</b>\n📅 Period: <b>{months} mo.</b>\n🏦 Provider: {payment_provider}\n🕐 Time: {timestamp}",
   "log_promo_activation": "🎁 <b>Promo Code Activated</b>\n\n👤 User: {user_display}\n🏷 Code: <code>{promo_code}</code>\n🎯 Bonus: <b>+{bonus_days}d</b>\n🕐 Time: {timestamp}",
   "log_trial_activation": "🆓 <b>Trial Activated</b>\n\n👤 User: {user_display}\n⏰ Valid until: <b>{end_date}</b>\n🕐 Time: {timestamp}",
+  "log_panel_sync": "{status_emoji} <b>Panel Synchronization</b>\n\n📊 Status: <b>{status}</b>\n👥 Users processed: <b>{users_processed}</b>\n📋 Subscriptions synced: <b>{subs_synced}</b>\n🕐 Time: {timestamp}\n\n📝 Details:\n{details}",
   "log_suspicious_promo": "⚠️ <b>Suspicious Promo Code Attempt</b>\n\n👤 User: {user_display}\n🆔 ID: <code>{user_id}</code>\n📝 Input: <pre>{suspicious_input}</pre>\n🕐 Time: {timestamp}",
 
   "admin_general_cancel_operation": "Operation cancelled ❌",
