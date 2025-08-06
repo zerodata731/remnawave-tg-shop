@@ -110,7 +110,7 @@ async def promo_management_handler(callback: types.CallbackQuery, i18n_data: dic
 
     builder = InlineKeyboardBuilder()
     for promo in promo_models:
-        status_emoji, _ = get_promo_status_emoji_and_text(promo, i18n, current_lang)
+        status_emoji, status_text = get_promo_status_emoji_and_text(promo, i18n, current_lang)
         button_text = f"{status_emoji} {promo.code} ({promo.current_activations}/{promo.max_activations})"
         builder.row(InlineKeyboardButton(text=button_text, callback_data=f"promo_detail:{promo.promo_code_id}"))
     
