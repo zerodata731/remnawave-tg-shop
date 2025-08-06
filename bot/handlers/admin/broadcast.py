@@ -1,6 +1,7 @@
 import logging
 import asyncio
 from aiogram import Router, F, types, Bot
+from aiogram.exceptions import TelegramRetryAfter
 
 from aiogram.fsm.context import FSMContext
 from typing import Optional
@@ -17,6 +18,7 @@ from bot.keyboards.inline.admin_keyboards import (
     get_admin_panel_keyboard,
 )
 from bot.middlewares.i18n import JsonI18n
+from bot.utils.message_queue import get_queue_manager
 
 router = Router(name="admin_broadcast_router")
 
@@ -171,22 +173,30 @@ async def confirm_broadcast_callback_handler(
             f"Admin {admin_user.id} broadcasting '{text[:50]}...' to {len(user_ids)} users."
         )
 
+        # Get message queue manager
+        queue_manager = get_queue_manager()
+        if not queue_manager:
+            await callback.message.edit_text("❌ Ошибка: система очередей не инициализирована", reply_markup=None)
+            return
+
+        # Queue all messages for sending
         for uid in user_ids:
             try:
-                await bot.send_message(
+                await queue_manager.send_message(
                     chat_id=uid,
                     text=text,
                     entities=entities,
                 )
                 sent_count += 1
-
+                
+                # Log successful queuing
                 await message_log_dal.create_message_log(
                     session,
                     {
                         "user_id": admin_user.id,
                         "telegram_username": admin_user.username,
                         "telegram_first_name": admin_user.first_name,
-                        "event_type": "admin_broadcast_sent",
+                        "event_type": "admin_broadcast_queued",
                         "content": f"To user {uid}: {text[:70]}...",
                         "is_admin_event": True,
                         "target_user_id": uid,
@@ -195,7 +205,7 @@ async def confirm_broadcast_callback_handler(
             except Exception as e:
                 failed_count += 1
                 logging.warning(
-                    f"Failed to send broadcast to {uid}: {type(e).__name__} – {e}"
+                    f"Failed to queue broadcast to {uid}: {type(e).__name__} – {e}"
                 )
                 await message_log_dal.create_message_log(
                     session,
@@ -209,7 +219,6 @@ async def confirm_broadcast_callback_handler(
                         "target_user_id": uid,
                     },
                 )
-            await asyncio.sleep(0.05)
 
         try:
             await session.commit()
@@ -217,7 +226,18 @@ async def confirm_broadcast_callback_handler(
             await session.rollback()
             logging.error(f"Error committing broadcast logs: {e_commit}")
 
-        result_message = _("admin_broadcast_finished_stats", sent_count=sent_count, failed_count=failed_count)
+        # Get queue stats for detailed report
+        queue_stats = queue_manager.get_queue_stats()
+        
+        result_message = f"""🚀 Рассылка поставлена в очередь!
+📤 В очередь добавлено: {sent_count}
+❌ Ошибок: {failed_count}
+
+📊 Статус очередей:
+👥 Очередь пользователей: {queue_stats['user_queue_size']} сообщений
+📢 Очередь групп: {queue_stats['group_queue_size']} сообщений
+
+ℹ️ Сообщения будут отправлены автоматически с соблюдением лимитов Telegram."""
         await callback.message.answer(
             result_message,
             reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),

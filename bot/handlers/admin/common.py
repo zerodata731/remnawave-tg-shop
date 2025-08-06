@@ -14,6 +14,7 @@ from bot.keyboards.inline.admin_keyboards import (
 from bot.middlewares.i18n import JsonI18n
 from bot.services.panel_api_service import PanelApiService
 from bot.services.subscription_service import SubscriptionService
+from bot.utils.message_queue import get_queue_manager
 
 from . import broadcast as admin_broadcast_handlers
 from .promo import create as admin_promo_create_handlers
@@ -120,6 +121,8 @@ async def admin_panel_actions_callback_handler(
             panel_service=panel_service,
             session=session)
         await callback.answer(_("admin_sync_initiated_from_panel"))
+    elif action == "queue_status":
+        await show_queue_status_handler(callback, i18n_data)
     elif action == "main":
         try:
             await callback.message.edit_text(
@@ -192,3 +195,52 @@ async def admin_section_handler(callback: types.CallbackQuery, state: FSMContext
             reply_markup=get_admin_panel_keyboard(i18n, current_lang, settings)
         )
         await callback.answer()
+
+
+async def show_queue_status_handler(callback: types.CallbackQuery, i18n_data: dict):
+    """Show message queue status to admin"""
+    current_lang = i18n_data.get("current_language", "ru")
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error processing request.", show_alert=True)
+        return
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    queue_manager = get_queue_manager()
+    if not queue_manager:
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        await callback.message.edit_text(
+            "❌ Система очередей не инициализирована",
+            reply_markup=InlineKeyboardBuilder().button(
+                text=_("back_to_admin_panel_button"),
+                callback_data="admin_action:main"
+            ).as_markup()
+        )
+        await callback.answer()
+        return
+
+    try:
+        stats = queue_manager.get_queue_stats()
+        
+        message_text = _(
+            "admin_queue_status_info",
+            user_queue_size=stats['user_queue_size'],
+            user_processing="✅ Да" if stats['user_queue_processing'] else "❌ Нет",
+            user_recent=stats['user_recent_sends'],
+            group_queue_size=stats['group_queue_size'],
+            group_processing="✅ Да" if stats['group_queue_processing'] else "❌ Нет",
+            group_recent=stats['group_recent_sends']
+        )
+        
+        from bot.keyboards.inline.admin_keyboards import get_back_to_admin_panel_keyboard
+        
+        await callback.message.edit_text(
+            message_text,
+            reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
+            parse_mode="HTML"
+        )
+        await callback.answer()
+        
+    except Exception as e:
+        logging.error(f"Error getting queue status: {e}")
+        await callback.answer("❌ Ошибка получения статуса очередей", show_alert=True)
