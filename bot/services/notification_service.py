@@ -2,12 +2,14 @@ import logging
 import asyncio
 from aiogram import Bot
 from aiogram.utils.text_decorations import html_decoration as hd
+from aiogram.exceptions import TelegramRetryAfter
 from datetime import datetime, timezone
 from typing import Optional, Union, Dict, Any
 
 from config.settings import Settings
 from sqlalchemy.orm import sessionmaker
 from bot.middlewares.i18n import JsonI18n
+from bot.utils.message_queue import get_queue_manager
 
 
 class NotificationService:
@@ -19,8 +21,23 @@ class NotificationService:
         self.i18n = i18n
     
     async def _send_to_log_channel(self, message: str, thread_id: Optional[int] = None):
-        """Send message to configured log channel/group"""
+        """Send message to configured log channel/group using message queue"""
         if not self.settings.LOG_CHAT_ID:
+            return
+        
+        queue_manager = get_queue_manager()
+        if not queue_manager:
+            logging.warning("Message queue manager not available, falling back to direct send")
+            try:
+                await self.bot.send_message(
+                    chat_id=self.settings.LOG_CHAT_ID,
+                    text=message,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                    message_thread_id=thread_id or self.settings.LOG_THREAD_ID
+                )
+            except Exception as e:
+                logging.error(f"Failed to send notification to log channel {self.settings.LOG_CHAT_ID}: {e}")
             return
         
         try:
@@ -28,7 +45,6 @@ class NotificationService:
             final_thread_id = thread_id or self.settings.LOG_THREAD_ID
             
             kwargs = {
-                "chat_id": self.settings.LOG_CHAT_ID,
                 "text": message,
                 "parse_mode": "HTML",
                 "disable_web_page_preview": True
@@ -38,26 +54,42 @@ class NotificationService:
             if final_thread_id:
                 kwargs["message_thread_id"] = final_thread_id
             
-            await self.bot.send_message(**kwargs)
+            # Queue message for sending (groups are rate limited to 15/minute)
+            await queue_manager.send_message(self.settings.LOG_CHAT_ID, **kwargs)
             
         except Exception as e:
-            logging.error(f"Failed to send notification to log channel {self.settings.LOG_CHAT_ID}: {e}")
+            logging.error(f"Failed to queue notification to log channel {self.settings.LOG_CHAT_ID}: {e}")
     
     async def _send_to_admins(self, message: str):
-        """Send message to all admin users"""
+        """Send message to all admin users using message queue"""
         if not self.settings.ADMIN_IDS:
+            return
+        
+        queue_manager = get_queue_manager()
+        if not queue_manager:
+            logging.warning("Message queue manager not available, falling back to direct send")
+            for admin_id in self.settings.ADMIN_IDS:
+                try:
+                    await self.bot.send_message(
+                        chat_id=admin_id,
+                        text=message,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to send notification to admin {admin_id}: {e}")
             return
         
         for admin_id in self.settings.ADMIN_IDS:
             try:
-                await self.bot.send_message(
+                await queue_manager.send_message(
                     chat_id=admin_id,
                     text=message,
                     parse_mode="HTML",
                     disable_web_page_preview=True
                 )
             except Exception as e:
-                logging.error(f"Failed to send notification to admin {admin_id}: {e}")
+                logging.error(f"Failed to queue notification to admin {admin_id}: {e}")
     
     async def notify_new_user_registration(self, user_id: int, username: Optional[str] = None, 
                                          first_name: Optional[str] = None, 

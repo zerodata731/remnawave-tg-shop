@@ -345,18 +345,22 @@ async def create_promo_code_final(callback_or_message,
         created_promo = await promo_code_dal.create_promo_code(session, promo_data)
         await session.commit()
         
+        # Log successful creation
+        logging.info(f"Promo code '{data['promo_code']}' created with ID {created_promo.promo_code_id}")
+        
         # Success message
+        valid_until_str = _("admin_promo_unlimited", default="Без ограничений") if not data.get("validity_days") else f"{data['validity_days']} дней"
         success_text = _(
             "admin_promo_created_success",
             default="✅ <b>Промокод успешно создан!</b>\n\n"
                    "🎟 Код: <code>{code}</code>\n"
                    "🎁 Бонусные дни: <b>{bonus_days}</b>\n"
                    "📊 Макс. активаций: <b>{max_activations}</b>\n"
-                   "⏰ Срок действия: <b>{validity}</b>",
+                   "⏰ Срок действия: <b>{valid_until_str}</b>",
             code=data["promo_code"],
             bonus_days=data["bonus_days"],
             max_activations=data["max_activations"],
-            validity=_("admin_promo_unlimited", default="Без ограничений") if not data.get("validity_days") else f"{data['validity_days']} дней"
+            valid_until_str=valid_until_str
         )
         
         if hasattr(callback_or_message, 'message'):  # CallbackQuery

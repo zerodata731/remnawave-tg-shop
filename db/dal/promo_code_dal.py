@@ -64,6 +64,14 @@ async def get_all_promo_codes_with_details(session: AsyncSession, limit: int = 5
     return result.scalars().all()
 
 
+async def get_promo_codes_count(session: AsyncSession) -> int:
+    """Get total count of all promo codes"""
+    from sqlalchemy import func
+    stmt = select(func.count(PromoCode.promo_code_id))
+    result = await session.execute(stmt)
+    return result.scalar_one()
+
+
 async def get_promo_activations_by_code_id(session: AsyncSession, promo_code_id: int, limit: Optional[int] = None, offset: int = 0) -> List[PromoCodeActivation]:
     """Get activation history for a specific promo code with optional pagination."""
     stmt = (select(PromoCodeActivation)

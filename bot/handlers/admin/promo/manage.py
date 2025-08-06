@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config.settings import Settings
+from config.settings import Settings, get_settings
 from db.dal import promo_code_dal
 from db.models import PromoCode, PromoCodeActivation
 from bot.states.admin_states import AdminStates
@@ -19,17 +19,27 @@ from bot.middlewares.i18n import JsonI18n
 router = Router(name="promo_manage_router")
 
 
+def get_promo_status_emoji_and_text(promo: PromoCode, i18n: JsonI18n, current_lang: str):
+    """Determine promo code status and return emoji + text"""
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+    
+    if promo.valid_until and promo.valid_until < datetime.now(timezone.utc):
+        return "⏰", _("admin_promo_status_expired")
+    elif promo.current_activations >= promo.max_activations:
+        return "🔄", _("admin_promo_status_used_up")
+    elif promo.is_active:
+        return "✅", _("admin_promo_status_active")
+    else:
+        return "🚫", _("admin_promo_status_inactive")
+
+
 async def get_promo_detail_text_and_keyboard(promo_id: int, session: AsyncSession, i18n: JsonI18n, current_lang: str):
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
     promo = await promo_code_dal.get_promo_code_by_id(session, promo_id)
     if not promo:
         return None, None
 
-    status = _("admin_promo_status_active") if promo.is_active else _("admin_promo_status_inactive")
-    if promo.valid_until and promo.valid_until < datetime.now(timezone.utc):
-        status = _("admin_promo_status_expired")
-    elif promo.current_activations >= promo.max_activations:
-        status = _("admin_promo_status_used_up")
+    status_emoji, status = get_promo_status_emoji_and_text(promo, i18n, current_lang)
 
     validity = _("admin_promo_valid_indefinitely")
     if promo.valid_until:
@@ -68,7 +78,7 @@ async def view_promo_codes_handler(callback: types.CallbackQuery, i18n_data: dic
     promo_models = await promo_code_dal.get_all_active_promo_codes(session, limit=20, offset=0)
     text = f"{_('admin_active_promos_list_header')}\n\n{_('admin_no_active_promos')}" if not promo_models else "\n".join(
         [_("admin_active_promos_list_header"), ""] + [
-            f"🎟 <code>{p.code}</code> | 🎁 {p.bonus_days}д | 📊 {p.current_activations}/{p.max_activations} | ⏰ {p.valid_until.strftime('%d.%m.%Y') if p.valid_until else _('admin_promo_valid_indefinitely')}"
+            f"{get_promo_status_emoji_and_text(p, i18n, current_lang)[0]} <code>{p.code}</code> | 🎁 {p.bonus_days}д | 📊 {p.current_activations}/{p.max_activations} | ⏰ {p.valid_until.strftime('%d.%m.%Y') if p.valid_until else _('admin_promo_valid_indefinitely')}"
             for p in promo_models
         ]
     )
@@ -77,27 +87,64 @@ async def view_promo_codes_handler(callback: types.CallbackQuery, i18n_data: dic
     await callback.answer()
 
 
-async def promo_management_handler(callback: types.CallbackQuery, i18n_data: dict, settings: Settings, session: AsyncSession):
-    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+async def promo_management_handler(callback: types.CallbackQuery, i18n_data: dict, settings: Settings, session: AsyncSession, page: int = 0):
+    current_lang = i18n_data.get("current_language", "ru")
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     if not i18n or not callback.message:
         await callback.answer("Error processing request.", show_alert=True)
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    promo_models = await promo_code_dal.get_all_promo_codes_with_details(session, limit=50, offset=0)
-    if not promo_models:
+    page_size = 10  # Количество промокодов на странице
+    offset = page * page_size
+    
+    # Получаем общее количество промокодов
+    total_count = await promo_code_dal.get_promo_codes_count(session)
+    total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 1
+    
+    promo_models = await promo_code_dal.get_all_promo_codes_with_details(session, limit=page_size, offset=offset)
+    if not promo_models and page == 0:
         await callback.message.edit_text(_("admin_promo_management_empty"), reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n), parse_mode="HTML")
         await callback.answer()
         return
 
     builder = InlineKeyboardBuilder()
     for promo in promo_models:
-        builder.row(InlineKeyboardButton(text=f"📝 {promo.code}", callback_data=f"promo_detail:{promo.promo_code_id}"))
+        status_emoji, status_text = get_promo_status_emoji_and_text(promo, i18n, current_lang)
+        button_text = f"{status_emoji} {promo.code} ({promo.current_activations}/{promo.max_activations})"
+        builder.row(InlineKeyboardButton(text=button_text, callback_data=f"promo_detail:{promo.promo_code_id}"))
+    
+    # Добавляем кнопки пагинации если есть больше одной страницы
+    if total_pages > 1:
+        pagination_buttons = []
+        if page > 0:
+            pagination_buttons.append(InlineKeyboardButton(text=_("prev_page_button"), callback_data=f"promo_management:{page-1}"))
+        if page < total_pages - 1:
+            pagination_buttons.append(InlineKeyboardButton(text=_("next_page_button"), callback_data=f"promo_management:{page+1}"))
+        
+        if pagination_buttons:
+            builder.row(*pagination_buttons)
+    
+    # Добавляем кнопки экспорта и возврата
+    builder.row(InlineKeyboardButton(text="📄 Экспорт CSV", callback_data="promo_export_all"))
     builder.row(InlineKeyboardButton(text=_("back_to_admin_panel_button"), callback_data="admin_action:main"))
     
-    await callback.message.edit_text(_("admin_promo_management_title"), reply_markup=builder.as_markup(), parse_mode="HTML")
+    # Формируем заголовок с информацией о страницах
+    title = _("admin_promo_management_title")
+    if total_pages > 1:
+        title += f"\n{_('admin_promo_list_page_info', current=page+1, total=total_pages, count=total_count)}"
+    
+    await callback.message.edit_text(title, reply_markup=builder.as_markup(), parse_mode="HTML")
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("promo_management:"))
+async def promo_management_pagination_handler(callback: types.CallbackQuery, i18n_data: dict, settings: Settings, session: AsyncSession):
+    try:
+        page = int(callback.data.split(":")[1])
+        await promo_management_handler(callback, i18n_data, settings, session, page)
+    except (ValueError, IndexError):
+        await callback.answer("Error processing pagination.", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("promo_detail:"))
@@ -227,6 +274,63 @@ async def promo_export_activations_handler(callback: types.CallbackQuery, i18n_d
     await callback.answer()
 
 
+@router.callback_query(F.data == "promo_export_all")
+async def promo_export_all_handler(callback: types.CallbackQuery, i18n_data: dict, session: AsyncSession):
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    current_lang = i18n_data.get("current_language")
+    if not i18n or not callback.message or not current_lang:
+        return await callback.answer("Error processing request.", show_alert=True)
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+
+    try:
+        await callback.answer("📄 Создаю CSV файл...", show_alert=True)
+        
+        # Получаем все промокоды
+        all_promos = await promo_code_dal.get_all_promo_codes_with_details(session, limit=10000, offset=0)
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Заголовки CSV
+        writer.writerow([
+            "Код", "Бонусные дни", "Максимальные активации", "Текущие активации", 
+            "Статус", "Активен", "Действителен до", "Создан", "Создал (Admin ID)"
+        ])
+        
+        for promo in all_promos:
+            # Определяем статус
+            status_emoji, status_text = get_promo_status_emoji_and_text(promo, i18n, current_lang)
+            
+            # Формируем данные для CSV
+            row = [
+                promo.code,
+                promo.bonus_days,
+                promo.max_activations,
+                promo.current_activations,
+                status_text,
+                "Да" if promo.is_active else "Нет",
+                promo.valid_until.strftime("%Y-%m-%d %H:%M:%S") if promo.valid_until else "Без ограничений",
+                promo.created_at.strftime("%Y-%m-%d %H:%M:%S") if promo.created_at else "N/A",
+                promo.created_by_admin_id or "N/A"
+            ]
+            writer.writerow(row)
+        
+        output.seek(0)
+        
+        # Создаем файл для отправки
+        filename = f"promo_codes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        file = types.BufferedInputFile(
+            output.getvalue().encode('utf-8-sig'),  # BOM для корректного отображения в Excel
+            filename=filename
+        )
+        
+        caption = f"📄 Экспорт всех промокодов\n📊 Всего: {len(all_promos)} промокодов"
+        await callback.message.answer_document(file, caption=caption)
+        
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка экспорта: {str(e)}", show_alert=True)
+
+
 @router.callback_query(F.data.startswith("promo_delete:"))
 async def promo_delete_handler(callback: types.CallbackQuery, i18n_data: dict, session: AsyncSession):
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
@@ -241,7 +345,7 @@ async def promo_delete_handler(callback: types.CallbackQuery, i18n_data: dict, s
         if promo:
             await session.commit()
             await callback.answer(_("admin_promo_deleted_success", code=promo.code), show_alert=True)
-            await promo_management_handler(callback, i18n_data, {}, session) # Settings not needed here
+            await promo_management_handler(callback, i18n_data, get_settings(), session, 0)
         else:
             await callback.answer(_("admin_promo_not_found"), show_alert=True)
     except (ValueError, IndexError):

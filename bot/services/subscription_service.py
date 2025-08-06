@@ -563,6 +563,10 @@ class SubscriptionService:
             )
             start_date = datetime.now(timezone.utc)
             new_end_date_obj = start_date + timedelta(days=bonus_days)
+            
+            # For promo code activations, use the configured user traffic limit
+            traffic_limit = self.settings.user_traffic_limit_bytes if "promo code" in reason.lower() else self.settings.trial_traffic_limit_bytes
+            
             bonus_sub_payload = {
                 "user_id": user_id,
                 "panel_user_uuid": panel_uuid,
@@ -572,7 +576,7 @@ class SubscriptionService:
                 "duration_months": 0,
                 "is_active": True,
                 "status_from_panel": "ACTIVE_BONUS",
-                "traffic_limit_bytes": self.settings.user_traffic_limit_bytes,
+                "traffic_limit_bytes": traffic_limit,
             }
             await subscription_dal.deactivate_other_active_subscriptions(
                 session, panel_uuid, panel_sub_uuid
@@ -593,14 +597,23 @@ class SubscriptionService:
             )
 
         if updated_sub_model:
+            # Prepare panel update payload
+            panel_update_payload = {
+                "expireAt": new_end_date_obj.isoformat(
+                    timespec="milliseconds"
+                ).replace("+00:00", "Z")
+            }
+            
+            # For promo code activations, remove traffic limit
+            if "promo code" in reason.lower():
+                panel_update_payload["trafficLimitBytes"] = self.settings.user_traffic_limit_bytes
+                panel_update_payload["trafficLimitStrategy"] = self.settings.USER_TRAFFIC_STRATEGY
+                logging.info(f"Updating traffic limit for user {user_id} to {self.settings.user_traffic_limit_bytes} bytes due to promo code activation")
+            
             panel_update_success = (
                 await self.panel_service.update_user_details_on_panel(
                     panel_uuid,
-                    {
-                        "expireAt": new_end_date_obj.isoformat(
-                            timespec="milliseconds"
-                        ).replace("+00:00", "Z")
-                    },
+                    panel_update_payload,
                 )
             )
             if not panel_update_success:
