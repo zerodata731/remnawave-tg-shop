@@ -51,6 +51,7 @@ async def perform_sync(panel_service: PanelApiService, session: AsyncSession,
             try:
                 users_processed_count += 1
                 panel_uuid = panel_user_dict.get("uuid")
+                panel_subscription_uuid = panel_user_dict.get("subscriptionUuid") or panel_user_dict.get("shortUuid")
                 telegram_id_from_panel = panel_user_dict.get("telegramId")
 
                 if not panel_uuid:
@@ -91,11 +92,19 @@ async def perform_sync(panel_service: PanelApiService, session: AsyncSession,
                                     )
                                     subscriptions_synced_count += 1
                             else:
-                                # Create new subscription record if none exists
+                                # Create or update subscription record
+                                # Use actual subscription UUID from panel if available, fallback to user UUID
+                                subscription_uuid_to_use = panel_subscription_uuid or panel_uuid
+                                
+                                if panel_subscription_uuid:
+                                    logging.info(f"Using panel subscriptionUuid {panel_subscription_uuid} for user {telegram_id_from_panel}")
+                                else:
+                                    logging.info(f"No subscriptionUuid from panel, using panel_uuid {panel_uuid} for user {telegram_id_from_panel}")
+                                
                                 sub_payload = {
                                     "user_id": telegram_id_from_panel,
                                     "panel_user_uuid": panel_uuid,
-                                    "panel_subscription_uuid": panel_uuid,  # Using same UUID
+                                    "panel_subscription_uuid": subscription_uuid_to_use,
                                     "start_date": datetime.now(timezone.utc),
                                     "end_date": panel_expire_at,
                                     "duration_months": 1,  # Default
