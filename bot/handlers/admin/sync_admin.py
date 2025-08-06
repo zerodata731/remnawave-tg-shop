@@ -21,10 +21,18 @@ async def perform_sync(panel_service: PanelApiService, session: AsyncSession,
     Perform panel synchronization and return results
     Returns dict with status, details, and sync statistics
     """
-    users_processed_count = 0
-    users_synced_successfully = 0
+    panel_records_checked = 0
+    users_found_in_db = 0
+    users_updated = 0
     subscriptions_synced_count = 0
     sync_errors = []
+    
+    # Additional counters for detailed logging
+    users_without_telegram_id = 0
+    users_not_found_in_db = 0
+    users_uuid_updated = 0
+    subscriptions_created = 0
+    subscriptions_updated = 0
 
     try:
         panel_users_data = await panel_service.get_all_panel_users()
@@ -49,74 +57,119 @@ async def perform_sync(panel_service: PanelApiService, session: AsyncSession,
 
         for panel_user_dict in panel_users_data:
             try:
-                users_processed_count += 1
+                panel_records_checked += 1
                 panel_uuid = panel_user_dict.get("uuid")
                 panel_subscription_uuid = panel_user_dict.get("subscriptionUuid") or panel_user_dict.get("shortUuid")
                 telegram_id_from_panel = panel_user_dict.get("telegramId")
 
                 if not panel_uuid:
                     sync_errors.append(f"Panel user missing UUID: {panel_user_dict}")
+                    logging.warning(f"Skipping panel user without UUID: {panel_user_dict}")
                     continue
 
-                # Sync user data
+                # Track users without telegram ID
+                if not telegram_id_from_panel:
+                    users_without_telegram_id += 1
+
+                # Try to find existing user in local DB
                 existing_user = None
+                
+                # First, try to find by telegram ID if available
                 if telegram_id_from_panel:
                     existing_user = await user_dal.get_user_by_id(session, telegram_id_from_panel)
+                    if existing_user:
+                        logging.debug(f"Found user by telegramId {telegram_id_from_panel}")
+                
+                # If not found by telegram ID, try to find by panel UUID
+                if not existing_user:
+                    existing_user = await user_dal.get_user_by_panel_uuid(session, panel_uuid)
+                    if existing_user:
+                        logging.info(f"Found user by panel UUID {panel_uuid}, telegramId: {existing_user.user_id}")
+                        # Update telegram ID if it was missing in panel data but we have local user
+                        if telegram_id_from_panel and existing_user.user_id != telegram_id_from_panel:
+                            logging.warning(f"TelegramId mismatch: panel={telegram_id_from_panel}, local={existing_user.user_id}")
+                
+                if not existing_user:
+                    users_not_found_in_db += 1
+                    if telegram_id_from_panel:
+                        logging.debug(f"Panel user with telegramId {telegram_id_from_panel} and UUID {panel_uuid} not found in local DB")
+                    else:
+                        logging.debug(f"Panel user with UUID {panel_uuid} (no telegramId) not found in local DB")
+                    continue
 
-                if existing_user:
-                    if existing_user.panel_user_uuid != panel_uuid:
-                        existing_user.panel_user_uuid = panel_uuid
-                        users_synced_successfully += 1
-                        logging.info(f"Updated panel UUID for user {telegram_id_from_panel}")
+                # User found in local DB
+                users_found_in_db += 1
+                user_was_updated = False
 
-                # Sync subscription data if user exists
-                if existing_user:
-                    panel_expire_at_iso = panel_user_dict.get("expireAt")
-                    panel_status = panel_user_dict.get("status", "UNKNOWN")
-                    
-                    if panel_expire_at_iso:
-                        try:
-                            panel_expire_at = datetime.fromisoformat(
-                                panel_expire_at_iso.replace("Z", "+00:00")
-                            )
-                            
-                            # Update or create subscription
-                            active_sub = await subscription_dal.get_active_subscription_by_user_id(
-                                session, telegram_id_from_panel, panel_uuid
-                            )
-                            
-                            if active_sub:
-                                if active_sub.end_date != panel_expire_at:
-                                    await subscription_dal.update_subscription_end_date(
-                                        session, active_sub.subscription_id, panel_expire_at
-                                    )
-                                    subscriptions_synced_count += 1
-                            else:
-                                # Create or update subscription record
-                                # Use actual subscription UUID from panel if available, fallback to user UUID
-                                subscription_uuid_to_use = panel_subscription_uuid or panel_uuid
+                # Get the actual user_id for subscription operations
+                actual_user_id = existing_user.user_id
+
+                # Update panel UUID if different
+                if existing_user.panel_user_uuid != panel_uuid:
+                    existing_user.panel_user_uuid = panel_uuid
+                    user_was_updated = True
+                    users_uuid_updated += 1
+                    logging.info(f"Updated panel UUID for user {actual_user_id}: {panel_uuid}")
+
+                # Sync subscription data
+                panel_expire_at_iso = panel_user_dict.get("expireAt")
+                panel_status = panel_user_dict.get("status", "UNKNOWN")
+                
+                if panel_expire_at_iso:
+                    try:
+                        panel_expire_at = datetime.fromisoformat(
+                            panel_expire_at_iso.replace("Z", "+00:00")
+                        )
+                        
+                        # Update or create subscription
+                        active_sub = await subscription_dal.get_active_subscription_by_user_id(
+                            session, actual_user_id, panel_uuid
+                        )
+                        
+                        if active_sub:
+                            # Check if subscription needs update
+                            if (active_sub.end_date != panel_expire_at or 
+                                active_sub.status_from_panel != panel_status or
+                                active_sub.is_active != (panel_status == "ACTIVE")):
                                 
-                                if panel_subscription_uuid:
-                                    logging.info(f"Using panel subscriptionUuid {panel_subscription_uuid} for user {telegram_id_from_panel}")
-                                else:
-                                    logging.info(f"No subscriptionUuid from panel, using panel_uuid {panel_uuid} for user {telegram_id_from_panel}")
-                                
-                                sub_payload = {
-                                    "user_id": telegram_id_from_panel,
-                                    "panel_user_uuid": panel_uuid,
-                                    "panel_subscription_uuid": subscription_uuid_to_use,
-                                    "start_date": datetime.now(timezone.utc),
-                                    "end_date": panel_expire_at,
-                                    "duration_months": 1,  # Default
-                                    "is_active": panel_status == "ACTIVE",
-                                    "status_from_panel": panel_status,
-                                    "traffic_limit_bytes": settings.user_traffic_limit_bytes,
-                                }
-                                await subscription_dal.upsert_subscription(session, sub_payload)
+                                await subscription_dal.update_subscription_end_date(
+                                    session, active_sub.subscription_id, panel_expire_at
+                                )
+                                # Update status fields
+                                active_sub.status_from_panel = panel_status
+                                active_sub.is_active = (panel_status == "ACTIVE")
                                 subscriptions_synced_count += 1
-                                
-                        except Exception as e:
-                            sync_errors.append(f"Error syncing subscription for user {telegram_id_from_panel}: {str(e)}")
+                                subscriptions_updated += 1
+                                user_was_updated = True
+                                logging.info(f"Updated subscription for user {actual_user_id}: expires {panel_expire_at}, status {panel_status}")
+                        else:
+                            # Create new subscription record
+                            subscription_uuid_to_use = panel_subscription_uuid or panel_uuid
+                            
+                            logging.info(f"Creating new subscription for user {actual_user_id} with UUID {subscription_uuid_to_use}")
+                            
+                            sub_payload = {
+                                "user_id": actual_user_id,
+                                "panel_user_uuid": panel_uuid,
+                                "panel_subscription_uuid": subscription_uuid_to_use,
+                                "start_date": datetime.now(timezone.utc),
+                                "end_date": panel_expire_at,
+                                "duration_months": 1,  # Default
+                                "is_active": panel_status == "ACTIVE",
+                                "status_from_panel": panel_status,
+                                "traffic_limit_bytes": settings.user_traffic_limit_bytes,
+                            }
+                            await subscription_dal.upsert_subscription(session, sub_payload)
+                            subscriptions_synced_count += 1
+                            subscriptions_created += 1
+                            user_was_updated = True
+                            
+                    except Exception as e:
+                        sync_errors.append(f"Error syncing subscription for user {actual_user_id}: {str(e)}")
+                        logging.error(f"Error syncing subscription for user {actual_user_id}: {e}")
+
+                if user_was_updated:
+                    users_updated += 1
                             
             except Exception as e_user:
                 sync_errors.append(f"Error processing panel user {panel_user_dict.get('uuid', 'unknown')}: {str(e_user)}")
@@ -124,20 +177,44 @@ async def perform_sync(panel_service: PanelApiService, session: AsyncSession,
 
         # Update sync status
         status = "completed_with_errors" if sync_errors else "completed"
-        details = f"Synced {users_synced_successfully}/{users_processed_count} users, {subscriptions_synced_count} subscriptions"
+        details = (f"📊 Статистика синхронизации:\n"
+                  f"🔍 Проверено записей панели: {panel_records_checked}\n"
+                  f"👥 Найдено пользователей в БД: {users_found_in_db}\n"
+                  f"🔄 Пользователей обновлено: {users_updated}\n"
+                  f"📋 Подписок синхронизировано: {subscriptions_synced_count}\n"
+                  f"   ├── Создано новых: {subscriptions_created}\n"
+                  f"   └── Обновлено существующих: {subscriptions_updated}")
+        
+        if users_without_telegram_id > 0:
+            details += f"\n⚠️ Записей без telegramId: {users_without_telegram_id}"
+        if users_not_found_in_db > 0:
+            details += f"\n❌ Не найдено в БД: {users_not_found_in_db}"
         if sync_errors:
-            details += f", {len(sync_errors)} errors"
+            details += f"\n🚫 Ошибок: {len(sync_errors)}"
 
         await panel_sync_dal.update_panel_sync_status(
-            session, status, details, users_processed_count, subscriptions_synced_count
+            session, status, details, panel_records_checked, subscriptions_synced_count
         )
         await session.commit()
+
+        # Detailed logging summary
+        logging.info(f"Sync completed - Summary:")
+        logging.info(f"  Panel records checked: {panel_records_checked}")
+        logging.info(f"  Users without telegramId: {users_without_telegram_id}")
+        logging.info(f"  Users not found in local DB: {users_not_found_in_db}")
+        logging.info(f"  Users found in local DB: {users_found_in_db}")
+        logging.info(f"  Users with UUID updated: {users_uuid_updated}")
+        logging.info(f"  Users updated overall: {users_updated}")
+        logging.info(f"  Subscriptions total synced: {subscriptions_synced_count}")
+        logging.info(f"  Subscriptions created: {subscriptions_created}")
+        logging.info(f"  Subscriptions updated: {subscriptions_updated}")
+        logging.info(f"  Sync errors: {len(sync_errors)}")
 
         return {
             "status": status,
             "details": details,
-            "users_processed": users_processed_count,
-            "users_synced": users_synced_successfully,
+            "users_processed": panel_records_checked,
+            "users_synced": users_found_in_db,
             "subs_synced": subscriptions_synced_count,
             "errors": sync_errors
         }
@@ -148,7 +225,7 @@ async def perform_sync(panel_service: PanelApiService, session: AsyncSession,
         error_detail = f"Unexpected error during sync: {str(e_sync_global)[:200]}"
         
         await panel_sync_dal.update_panel_sync_status(
-            session, "failed", error_detail, users_processed_count, subscriptions_synced_count
+            session, "failed", error_detail, panel_records_checked, subscriptions_synced_count
         )
         
         return {"status": "failed", "details": error_detail, "errors": [str(e_sync_global)]}
