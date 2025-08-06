@@ -197,9 +197,7 @@ async def show_statistics_handler(callback: types.CallbackQuery,
             '%Y-%m-%d %H:%M:%S UTC') if sync_time_val else "N/A"
 
         details_val = sync_status_model.details
-        details_str = (details_val[:100] +
-                       "...") if details_val and len(details_val) > 100 else (
-                           details_val or "N/A")
+        details_str = details_val or "N/A"
 
         stats_text_parts.append(
             f"  {_('admin_stats_sync_time')}: {sync_time_str}")
