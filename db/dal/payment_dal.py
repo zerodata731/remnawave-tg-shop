@@ -90,6 +90,22 @@ async def get_recent_payment_logs_with_user(session: AsyncSession,
     return result.scalars().all()
 
 
+async def get_payments_count(session: AsyncSession) -> int:
+    """Get total count of successful payments."""
+    stmt = select(func.count(Payment.payment_id)).where(Payment.status == 'succeeded')
+    result = await session.execute(stmt)
+    return result.scalar() or 0
+
+
+async def get_all_succeeded_payments_with_user(session: AsyncSession) -> List[Payment]:
+    """Get all successful payments with user data for export."""
+    stmt = (select(Payment).options(selectinload(Payment.user))
+            .where(Payment.status == 'succeeded')
+            .order_by(Payment.created_at.desc()))
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
 async def update_provider_payment_and_status(
         session: AsyncSession, payment_db_id: int,
         provider_payment_id: str, new_status: str) -> Optional[Payment]:
