@@ -39,11 +39,16 @@ def convert_period_to_months(period: Optional[str]) -> int:
 
 
 class TributeService:
-    def __init__(self, bot: Bot, settings: Settings, i18n: JsonI18n,
-                 async_session_factory: sessionmaker,
-                 panel_service: PanelApiService,
-                 subscription_service: SubscriptionService,
-                 referral_service: ReferralService):
+    def __init__(
+        self,
+        bot: Bot,
+        settings: Settings,
+        i18n: JsonI18n,
+        async_session_factory: sessionmaker,
+        panel_service: PanelApiService,
+        subscription_service: SubscriptionService,
+        referral_service: ReferralService,
+    ):
         self.bot = bot
         self.settings = settings
         self.i18n = i18n
@@ -52,8 +57,7 @@ class TributeService:
         self.subscription_service = subscription_service
         self.referral_service = referral_service
 
-    async def handle_webhook(self, raw_body: bytes,
-                             signature_header: Optional[str]) -> web.Response:
+    async def handle_webhook(self, raw_body: bytes, signature_header: Optional[str]) -> web.Response:
         settings = self.settings
         bot = self.bot
         i18n = self.i18n
@@ -79,96 +83,53 @@ class TributeService:
             json.dumps(payload, ensure_ascii=False),
         )
 
-        event_name = payload.get('name')
-        data = payload.get('payload', {})
-        user_id = data.get('telegram_user_id')
-        price_val = (
-            data.get('amount')
-            or data.get('amount_paid')
-            or data.get('price')
-        )
+        # Tribute webhook spec: only two events are sent
+        # name: new_subscription | cancelled_subscription
+        event_name = payload.get("name")
+        data = payload.get("payload", {})
 
-        if not user_id or price_val is None:
-            return web.Response(status=200, text="ok_missing_fields")
+        # Mandatory routing fields
+        user_id = data.get("telegram_user_id")
+        if not user_id:
+            return web.Response(status=400, text="missing_telegram_user_id")
 
-        period_val = data.get('period')
+        period_val = data.get("period")
         months = convert_period_to_months(period_val)
-        price_rub = price_val / 100
+
+        # Price/amount from spec is integer cents in currency; we store float in Payment
+        amount_value = data.get("amount") or data.get("price")
+        currency = (data.get("currency") or settings.DEFAULT_CURRENCY_SYMBOL or "RUB").upper()
+        amount_float = float(amount_value) if amount_value is not None else 0.0
 
         async with async_session_factory() as session:
-            # Normalize provider payment identifier to be unique per successful charge
-            # Prefer true payment/transaction identifiers over subscription id
-            provider_payment_id = (
-                data.get('payment_id')
-                or data.get('invoice_id')
-                or data.get('order_id')
-                or data.get('transaction_id')
-                or data.get('charge_id')
-                or data.get('subscription_payment_id')
-            )
-            if provider_payment_id is None:
-                # Fallback to subscription_id which may be stable across renewals
-                # To avoid deduplicating different renewals under same subscription,
-                # append a timestamp if available
-                base_sub_id = data.get('subscription_id')
-                paid_at = (
-                    data.get('paid_at')
-                    or data.get('created_at')
-                    or payload.get('timestamp')
-                    or payload.get('id')
+            if event_name == "new_subscription":
+                # Build a stable provider payment id from subscription and timestamps
+                provider_payment_id = str(data.get("subscription_id"))
+                # Idempotent ensure payment
+                payment_record = await payment_dal.ensure_payment_with_provider_id(
+                    session,
+                    user_id=int(user_id),
+                    amount=amount_float,
+                    currency=currency,
+                    months=months,
+                    description="Tribute subscription",
+                    provider="tribute",
+                    provider_payment_id=provider_payment_id,
                 )
-                if base_sub_id is not None and paid_at is not None:
-                    provider_payment_id = f"{base_sub_id}:{paid_at}"
-                elif base_sub_id is not None:
-                    provider_payment_id = str(base_sub_id)
-            else:
-                provider_payment_id = str(provider_payment_id)
 
-            # Consider multiple Tribute events as successful charge events
-            success_events = {
-                'new_subscription',
-                'payment_succeeded',
-                'subscription_renewed',
-                'subscription_payment_succeeded',
-                'invoice_paid',
-            }
-
-            if event_name in success_events:
-                existing_payment = await payment_dal.get_payment_by_provider_payment_id(
-                    session, provider_payment_id)
-                if existing_payment:
-                    logging.info(
-                        "Duplicate Tribute payment webhook ignored for provider_payment_id %s",
-                        provider_payment_id,
-                    )
-                    payment_record = existing_payment
-                else:
-                    payment_record = await payment_dal.create_payment_record(
-                        session,
-                        {
-                            'user_id': user_id,
-                            'amount': float(price_rub),
-                            'currency': 'RUB',
-                            'status': 'succeeded',
-                            'description': 'Tribute subscription',
-                            'subscription_duration_months': months,
-                            'provider_payment_id': provider_payment_id,
-                            'provider': 'tribute',
-                        },
-                    )
                 activation_details = await subscription_service.activate_subscription(
                     session,
-                    user_id,
+                    int(user_id),
                     months,
-                    float(price_rub),
+                    float(amount_float),
                     payment_record.payment_id,
-                    provider='tribute',
+                    provider="tribute",
                 )
                 referral_bonus = await referral_service.apply_referral_bonuses_for_payment(
-                    session, user_id, months)
+                    session, int(user_id), months)
                 await session.commit()
 
-                db_user = await user_dal.get_user_by_id(session, user_id)
+                db_user = await user_dal.get_user_by_id(session, int(user_id))
                 lang = db_user.language_code if db_user and db_user.language_code else settings.DEFAULT_LANGUAGE
                 _ = lambda k, **kw: i18n.gettext(lang, k, **kw)
 
@@ -213,7 +174,7 @@ class TributeService:
 
                     try:
                         await bot.send_message(
-                            user_id,
+                            int(user_id),
                             success_msg,
                             reply_markup=markup,
                             parse_mode="HTML",
@@ -226,21 +187,19 @@ class TributeService:
                 # Send notification about payment
                 try:
                     notification_service = NotificationService(bot, settings, i18n)
-                    user = await user_dal.get_user_by_id(session, user_id)
+                    user = await user_dal.get_user_by_id(session, int(user_id))
                     await notification_service.notify_payment_received(
-                        user_id=user_id,
-                        amount=float(price_rub),
-                        currency="RUB",
+                        user_id=int(user_id),
+                        amount=float(amount_float),
+                        currency=currency,
                         months=months,
                         payment_provider="tribute",
                         username=user.username if user else None
                     )
                 except Exception as e:
                     logging.error(f"Failed to send tribute payment notification: {e}")
-                    
-            elif event_name == 'subscription_cancelled':
-                # Handle tribute subscription cancellation
-                await self._handle_tribute_cancellation(session, user_id, bot, i18n)
+            elif event_name == "cancelled_subscription":
+                await self._handle_tribute_cancellation(session, int(user_id), bot, i18n)
                 
             else:
                 await session.commit()
@@ -254,22 +213,7 @@ class TributeService:
         
         try:
             # Set all user's subscriptions to expire in 1 day (grace period)
-            grace_end_date = datetime.now(timezone.utc) + timedelta(days=1)
-            
-            # Get all active subscriptions for the user
-            user_subs = await subscription_dal.get_active_subscriptions_for_user(session, user_id)
-            
-            for sub in user_subs:
-                await subscription_dal.update_subscription(
-                    session, 
-                    sub.subscription_id, 
-                    {
-                        'end_date': grace_end_date,
-                        'status_from_panel': 'CANCELLED',
-                        'skip_notifications': True  # Skip future notifications for cancelled subs
-                    }
-                )
-            
+            await subscription_dal.set_user_subscriptions_cancelled_with_grace(session, user_id, grace_days=1)
             await session.commit()
             
             # Send notification about cancellation if enabled
@@ -292,7 +236,7 @@ class TributeService:
                 
                 try:
                     await bot.send_message(
-                        user_id,
+                        int(user_id),
                         cancellation_msg,
                         reply_markup=markup,
                         parse_mode="HTML"

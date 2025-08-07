@@ -16,6 +16,7 @@
   "choose_language": "Выберите язык / Select language:",
   "language_set_alert": "Язык изменен!",
   "error_occurred_try_again": "Произошла ошибка, попробуйте снова.",
+  "error_try_again": "Попробуйте еще раз.",
   "error_displaying_menu": "Ошибка отображения меню.",
   "main_menu_unknown_action": "Неизвестное действие.",
 

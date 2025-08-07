@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from config.settings import Settings
 from bot.services.panel_api_service import PanelApiService
-from bot.services.notification_service import notify_admin_panel_sync
+from bot.services.notification_service import NotificationService
 
 from db.dal import user_dal, subscription_dal, panel_sync_dal
 
@@ -287,8 +287,9 @@ async def sync_command_handler(
         
         # Send notification to log channel with proper thread handling
         try:
-            await notify_admin_panel_sync(
-                bot, settings, i18n, status, details,
+            notification_service = NotificationService(bot, settings, i18n)
+            await notification_service.notify_panel_sync(
+                status, details,
                 sync_result.get("users_processed", 0),
                 sync_result.get("subs_synced", 0)
             )
@@ -301,8 +302,9 @@ async def sync_command_handler(
         
         # Send notification to log channel about failure
         try:
-            await notify_admin_panel_sync(
-                bot, settings, i18n, "failed", str(e_sync_global), 0, 0
+            notification_service = NotificationService(bot, settings, i18n)
+            await notification_service.notify_panel_sync(
+                "failed", str(e_sync_global), 0, 0
             )
         except Exception as e_notification:
             logging.error(f"Failed to send sync failure notification: {e_notification}")

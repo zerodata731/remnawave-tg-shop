@@ -30,20 +30,7 @@ async def get_user_by_panel_uuid(
     return result.scalar_one_or_none()
 
 
-async def get_user(
-    session: AsyncSession,
-    *,
-    user_id: Optional[int] = None,
-    username: Optional[str] = None,
-    panel_uuid: Optional[str] = None,
-) -> Optional[User]:
-    if user_id is not None:
-        return await get_user_by_id(session, user_id)
-    if username is not None:
-        return await get_user_by_username(session, username)
-    if panel_uuid is not None:
-        return await get_user_by_panel_uuid(session, panel_uuid)
-    return None
+## Removed unused generic get_user helper to keep DAL explicit and simple
 
 
 async def create_user(session: AsyncSession, user_data: Dict[str, Any]) -> User:

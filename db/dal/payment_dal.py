@@ -47,6 +47,38 @@ async def get_payment_by_provider_payment_id(
     return result.scalar_one_or_none()
 
 
+async def ensure_payment_with_provider_id(
+        session: AsyncSession,
+        *,
+        user_id: int,
+        amount: float,
+        currency: str,
+        months: int,
+        description: str,
+        provider: str,
+        provider_payment_id: str) -> Payment:
+    """Idempotently create a payment record for a provider event.
+
+    If a payment with the same provider_payment_id already exists, returns it.
+    Otherwise creates a new succeeded payment with provided data.
+    """
+    existing = await get_payment_by_provider_payment_id(session, provider_payment_id)
+    if existing:
+        return existing
+
+    payment_payload: Dict[str, Any] = {
+        "user_id": user_id,
+        "amount": float(amount),
+        "currency": currency,
+        "status": "succeeded",
+        "description": description,
+        "subscription_duration_months": months,
+        "provider_payment_id": provider_payment_id,
+        "provider": provider,
+    }
+    return await create_payment_record(session, payment_payload)
+
+
 async def get_payment_by_db_id(session: AsyncSession,
                                payment_db_id: int) -> Optional[Payment]:
 
