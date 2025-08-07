@@ -2,7 +2,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, func
+from sqlalchemy import update, func, and_
 from sqlalchemy.orm import selectinload
 
 from db.models import Payment, User

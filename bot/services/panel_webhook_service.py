@@ -133,18 +133,20 @@ class PanelWebhookService:
                     user_name=first_name,
                     end_date=user_payload.get("expireAt", "")[:10],
                 )
-        elif event_name == "user.expired" and self.settings.SUBSCRIPTION_NOTIFY_ON_EXPIRE:
-            # Check if this is a tribute user that should be auto-renewed
+        elif event_name == "user.expired":
+            # Check if this is a tribute user that should be auto-renewed (regardless of notification settings)
             await self._handle_expired_subscription(session, user_id, user_payload, lang, markup, first_name)
             
-            await self._send_message(
-                user_id,
-                lang,
-                "subscription_expired_notification",
-                reply_markup=markup,
-                user_name=first_name,
-                end_date=user_payload.get("expireAt", "")[:10],
-            )
+            # Send notification only if enabled
+            if self.settings.SUBSCRIPTION_NOTIFY_ON_EXPIRE:
+                await self._send_message(
+                    user_id,
+                    lang,
+                    "subscription_expired_notification",
+                    reply_markup=markup,
+                    user_name=first_name,
+                    end_date=user_payload.get("expireAt", "")[:10],
+                )
         elif event_name == "user.expired_24_hours_ago" and self.settings.SUBSCRIPTION_NOTIFY_AFTER_EXPIRE:
             await self._send_message(
                 user_id,
