@@ -82,8 +82,10 @@ async def update_payment_status_by_db_id(
 async def get_recent_payment_logs_with_user(session: AsyncSession,
                                             limit: int = 20,
                                             offset: int = 0) -> List[Payment]:
-    stmt = (select(Payment).options(selectinload(Payment.user)).order_by(
-        Payment.created_at.desc()).limit(limit).offset(offset))
+    stmt = (select(Payment).options(selectinload(Payment.user))
+            .where(Payment.status == 'succeeded')
+            .order_by(Payment.created_at.desc())
+            .limit(limit).offset(offset))
     result = await session.execute(stmt)
     return result.scalars().all()
 
