@@ -379,7 +379,7 @@ async def promo_edit_field_handler(callback: types.CallbackQuery, state: FSMCont
     if not i18n or not callback.message or not current_lang: return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
     
-    _, field, promo_id_str = callback.data.split(":")
+    action, field, promo_id_str = callback.data.split(":")
     await state.update_data(promo_id=int(promo_id_str), field_to_edit=field)
     
     prompts = {
