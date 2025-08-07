@@ -96,8 +96,44 @@ class TributeService:
         price_rub = price_val / 100
 
         async with async_session_factory() as session:
-            if event_name == 'new_subscription':
-                provider_payment_id = str(data.get('subscription_id'))
+            # Normalize provider payment identifier to be unique per successful charge
+            # Prefer true payment/transaction identifiers over subscription id
+            provider_payment_id = (
+                data.get('payment_id')
+                or data.get('invoice_id')
+                or data.get('order_id')
+                or data.get('transaction_id')
+                or data.get('charge_id')
+                or data.get('subscription_payment_id')
+            )
+            if provider_payment_id is None:
+                # Fallback to subscription_id which may be stable across renewals
+                # To avoid deduplicating different renewals under same subscription,
+                # append a timestamp if available
+                base_sub_id = data.get('subscription_id')
+                paid_at = (
+                    data.get('paid_at')
+                    or data.get('created_at')
+                    or payload.get('timestamp')
+                    or payload.get('id')
+                )
+                if base_sub_id is not None and paid_at is not None:
+                    provider_payment_id = f"{base_sub_id}:{paid_at}"
+                elif base_sub_id is not None:
+                    provider_payment_id = str(base_sub_id)
+            else:
+                provider_payment_id = str(provider_payment_id)
+
+            # Consider multiple Tribute events as successful charge events
+            success_events = {
+                'new_subscription',
+                'payment_succeeded',
+                'subscription_renewed',
+                'subscription_payment_succeeded',
+                'invoice_paid',
+            }
+
+            if event_name in success_events:
                 existing_payment = await payment_dal.get_payment_by_provider_payment_id(
                     session, provider_payment_id)
                 if existing_payment:
