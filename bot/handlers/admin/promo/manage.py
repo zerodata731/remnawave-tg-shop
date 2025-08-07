@@ -332,7 +332,7 @@ async def promo_export_all_handler(callback: types.CallbackQuery, i18n_data: dic
 
 
 @router.callback_query(F.data.startswith("promo_delete:"))
-async def promo_delete_handler(callback: types.CallbackQuery, i18n_data: dict, session: AsyncSession):
+async def promo_delete_handler(callback: types.CallbackQuery, i18n_data: dict, settings: Settings, session: AsyncSession):
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     current_lang = i18n_data.get("current_language")
     if not i18n or not callback.message or not current_lang:
@@ -345,7 +345,7 @@ async def promo_delete_handler(callback: types.CallbackQuery, i18n_data: dict, s
         if promo:
             await session.commit()
             await callback.answer(_("admin_promo_deleted_success", code=promo.code), show_alert=True)
-            await promo_management_handler(callback, i18n_data, get_settings(), session, 0)
+            await promo_management_handler(callback, i18n_data, settings, session, 0)
         else:
             await callback.answer(_("admin_promo_not_found"), show_alert=True)
     except (ValueError, IndexError):
@@ -354,7 +354,7 @@ async def promo_delete_handler(callback: types.CallbackQuery, i18n_data: dict, s
 
 # --- Promo Edit Handlers ---
 @router.callback_query(F.data.startswith("promo_edit_select:"))
-async def promo_edit_select_handler(callback: types.CallbackQuery, i18n_data: dict):
+async def promo_edit_select_handler(callback: types.CallbackQuery, i18n_data: dict, session: AsyncSession):
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     current_lang = i18n_data.get("current_language")
     if not i18n or not callback.message or not current_lang:
@@ -373,7 +373,7 @@ async def promo_edit_select_handler(callback: types.CallbackQuery, i18n_data: di
 
 
 @router.callback_query(F.data.startswith("promo_edit_field:"))
-async def promo_edit_field_handler(callback: types.CallbackQuery, state: FSMContext, i18n_data: dict):
+async def promo_edit_field_handler(callback: types.CallbackQuery, state: FSMContext, i18n_data: dict, session: AsyncSession):
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     current_lang = i18n_data.get("current_language")
     if not i18n or not callback.message or not current_lang: return

@@ -53,6 +53,29 @@ async def update_subscription(
     return sub
 
 
+async def set_user_subscriptions_cancelled_with_grace(
+        session: AsyncSession, user_id: int, grace_days: int = 1) -> int:
+    """Mark all active user subscriptions as cancelled with a short grace period.
+
+    Sets end_date to now + grace_days, status_from_panel to 'CANCELLED', and
+    skip future notifications to reduce noise after cancellation.
+    Returns number of updated rows.
+    """
+    from datetime import datetime, timezone, timedelta
+    grace_end = datetime.now(timezone.utc) + timedelta(days=grace_days)
+    stmt = (
+        update(Subscription)
+        .where(Subscription.user_id == user_id, Subscription.is_active == True)
+        .values(
+            end_date=grace_end,
+            status_from_panel="CANCELLED",
+            skip_notifications=True,
+        )
+    )
+    result = await session.execute(stmt)
+    return result.rowcount or 0
+
+
 async def upsert_subscription(session: AsyncSession,
                               sub_payload: Dict[str, Any]) -> Subscription:
     panel_sub_uuid = sub_payload.get("panel_subscription_uuid")

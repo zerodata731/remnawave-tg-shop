@@ -2,7 +2,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, func
+from sqlalchemy import update, func, and_
 from sqlalchemy.orm import selectinload
 
 from db.models import Payment, User
@@ -47,6 +47,38 @@ async def get_payment_by_provider_payment_id(
     return result.scalar_one_or_none()
 
 
+async def ensure_payment_with_provider_id(
+        session: AsyncSession,
+        *,
+        user_id: int,
+        amount: float,
+        currency: str,
+        months: int,
+        description: str,
+        provider: str,
+        provider_payment_id: str) -> Payment:
+    """Idempotently create a payment record for a provider event.
+
+    If a payment with the same provider_payment_id already exists, returns it.
+    Otherwise creates a new succeeded payment with provided data.
+    """
+    existing = await get_payment_by_provider_payment_id(session, provider_payment_id)
+    if existing:
+        return existing
+
+    payment_payload: Dict[str, Any] = {
+        "user_id": user_id,
+        "amount": float(amount),
+        "currency": currency,
+        "status": "succeeded",
+        "description": description,
+        "subscription_duration_months": months,
+        "provider_payment_id": provider_payment_id,
+        "provider": provider,
+    }
+    return await create_payment_record(session, payment_payload)
+
+
 async def get_payment_by_db_id(session: AsyncSession,
                                payment_db_id: int) -> Optional[Payment]:
 
@@ -82,8 +114,26 @@ async def update_payment_status_by_db_id(
 async def get_recent_payment_logs_with_user(session: AsyncSession,
                                             limit: int = 20,
                                             offset: int = 0) -> List[Payment]:
-    stmt = (select(Payment).options(selectinload(Payment.user)).order_by(
-        Payment.created_at.desc()).limit(limit).offset(offset))
+    stmt = (select(Payment).options(selectinload(Payment.user))
+            .where(Payment.status == 'succeeded')
+            .order_by(Payment.created_at.desc())
+            .limit(limit).offset(offset))
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+async def get_payments_count(session: AsyncSession) -> int:
+    """Get total count of successful payments."""
+    stmt = select(func.count(Payment.payment_id)).where(Payment.status == 'succeeded')
+    result = await session.execute(stmt)
+    return result.scalar() or 0
+
+
+async def get_all_succeeded_payments_with_user(session: AsyncSession) -> List[Payment]:
+    """Get all successful payments with user data for export."""
+    stmt = (select(Payment).options(selectinload(Payment.user))
+            .where(Payment.status == 'succeeded')
+            .order_by(Payment.created_at.desc()))
     result = await session.execute(stmt)
     return result.scalars().all()
 

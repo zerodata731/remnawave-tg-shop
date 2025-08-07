@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from config.settings import Settings
 from bot.services.panel_api_service import PanelApiService
-from bot.services.notification_service import notify_admin_panel_sync
+from bot.services.notification_service import NotificationService
 
 from db.dal import user_dal, subscription_dal, panel_sync_dal
 
@@ -122,48 +122,88 @@ async def perform_sync(panel_service: PanelApiService, session: AsyncSession,
                             panel_expire_at_iso.replace("Z", "+00:00")
                         )
                         
-                        # Update or create subscription
-                        active_sub = await subscription_dal.get_active_subscription_by_user_id(
-                            session, actual_user_id, panel_uuid
+                        # Prefer syncing by concrete subscription UUID (shortUuid/subscriptionUuid)
+                        subscription_uuid_from_panel = (
+                            panel_user_dict.get("subscriptionUuid")
+                            or panel_user_dict.get("shortUuid")
                         )
-                        
-                        if active_sub:
-                            # Check if subscription needs update
-                            if (active_sub.end_date != panel_expire_at or 
-                                active_sub.status_from_panel != panel_status or
-                                active_sub.is_active != (panel_status == "ACTIVE")):
-                                
-                                await subscription_dal.update_subscription_end_date(
-                                    session, active_sub.subscription_id, panel_expire_at
+
+                        if subscription_uuid_from_panel:
+                            # Try to find subscription by its panel_subscription_uuid first (idempotent)
+                            existing_sub_by_uuid = (
+                                await subscription_dal.get_subscription_by_panel_subscription_uuid(
+                                    session, subscription_uuid_from_panel
                                 )
-                                # Update status fields
-                                active_sub.status_from_panel = panel_status
-                                active_sub.is_active = (panel_status == "ACTIVE")
+                            )
+
+                            if existing_sub_by_uuid:
+                                # Atomic update of all relevant fields
+                                await subscription_dal.update_subscription(
+                                    session,
+                                    existing_sub_by_uuid.subscription_id,
+                                    {
+                                        "user_id": actual_user_id,
+                                        "panel_user_uuid": panel_uuid,
+                                        "end_date": panel_expire_at,
+                                        "is_active": panel_status == "ACTIVE",
+                                        "status_from_panel": panel_status,
+                                    },
+                                )
                                 subscriptions_synced_count += 1
                                 subscriptions_updated += 1
                                 user_was_updated = True
-                                logging.info(f"Updated subscription for user {actual_user_id}: expires {panel_expire_at}, status {panel_status}")
+                                logging.info(
+                                    f"Synced existing subscription {existing_sub_by_uuid.subscription_id} for user {actual_user_id}: expires {panel_expire_at}, status {panel_status}"
+                                )
+                            else:
+                                # Create a new subscription only when we have a concrete subscription UUID
+                                sub_payload = {
+                                    "user_id": actual_user_id,
+                                    "panel_user_uuid": panel_uuid,
+                                    "panel_subscription_uuid": subscription_uuid_from_panel,
+                                    # Do not guess precise start_date from panel; keep nullable
+                                    "start_date": None,
+                                    "end_date": panel_expire_at,
+                                    "duration_months": None,
+                                    "is_active": panel_status == "ACTIVE",
+                                    "status_from_panel": panel_status,
+                                    "traffic_limit_bytes": settings.user_traffic_limit_bytes,
+                                }
+                                created_sub = await subscription_dal.upsert_subscription(
+                                    session, sub_payload
+                                )
+                                subscriptions_synced_count += 1
+                                subscriptions_created += 1
+                                user_was_updated = True
+                                logging.info(
+                                    f"Created subscription {created_sub.subscription_id} for user {actual_user_id} by panel_sub_uuid {subscription_uuid_from_panel}"
+                                )
                         else:
-                            # Create new subscription record
-                            subscription_uuid_to_use = panel_subscription_uuid or panel_uuid
-                            
-                            logging.info(f"Creating new subscription for user {actual_user_id} with UUID {subscription_uuid_to_use}")
-                            
-                            sub_payload = {
-                                "user_id": actual_user_id,
-                                "panel_user_uuid": panel_uuid,
-                                "panel_subscription_uuid": subscription_uuid_to_use,
-                                "start_date": datetime.now(timezone.utc),
-                                "end_date": panel_expire_at,
-                                "duration_months": 1,  # Default
-                                "is_active": panel_status == "ACTIVE",
-                                "status_from_panel": panel_status,
-                                "traffic_limit_bytes": settings.user_traffic_limit_bytes,
-                            }
-                            await subscription_dal.upsert_subscription(session, sub_payload)
-                            subscriptions_synced_count += 1
-                            subscriptions_created += 1
-                            user_was_updated = True
+                            # No subscription UUID from panel: only update an already active subscription for this user/panel UUID
+                            active_sub = await subscription_dal.get_active_subscription_by_user_id(
+                                session, actual_user_id, panel_uuid
+                            )
+                            if active_sub:
+                                await subscription_dal.update_subscription(
+                                    session,
+                                    active_sub.subscription_id,
+                                    {
+                                        "end_date": panel_expire_at,
+                                        "is_active": panel_status == "ACTIVE",
+                                        "status_from_panel": panel_status,
+                                    },
+                                )
+                                subscriptions_synced_count += 1
+                                subscriptions_updated += 1
+                                user_was_updated = True
+                                logging.info(
+                                    f"Updated active subscription {active_sub.subscription_id} for user {actual_user_id}: expires {panel_expire_at}, status {panel_status}"
+                                )
+                            else:
+                                # Without a concrete subscription UUID we avoid creating new records to keep sync idempotent
+                                logging.debug(
+                                    f"No subscriptionUuid for panel user {panel_uuid}; skipped creation for user {actual_user_id}"
+                                )
                             
                     except Exception as e:
                         sync_errors.append(f"Error syncing subscription for user {actual_user_id}: {str(e)}")
@@ -265,7 +305,7 @@ async def sync_command_handler(
         return
 
     if isinstance(message_event, types.Message):
-        await message_event.answer(_("sync_started"))
+        await message_event.answer(_("sync_started_simple"))
 
     logging.info(f"Admin ({message_event.from_user.id}) triggered panel sync.")
 
@@ -277,32 +317,19 @@ async def sync_command_handler(
         details = sync_result.get("details", "No details available")
         errors = sync_result.get("errors", [])
         
+        # Simple confirmation message to admin
         if status == "failed":
-            await bot.send_message(target_chat_id, _("sync_failed", details=details))
+            await bot.send_message(target_chat_id, _("sync_failed_simple"))
         elif status == "completed_with_errors":
-            error_preview = "; ".join(errors[:3])  # Show first 3 errors
-            final_message = _(
-                "sync_completed_with_errors_details",
-                total_checked=sync_result.get("users_processed", 0),
-                users_synced=sync_result.get("users_synced", 0),
-                subs_synced=sync_result.get("subs_synced", 0),
-                errors_count=len(errors),
-                error_details_preview=error_preview
-            )
-            await bot.send_message(target_chat_id, final_message)
+            await bot.send_message(target_chat_id, _("sync_errors_simple", errors_count=len(errors)))
         else:
-            final_message = _(
-                "sync_completed_details",
-                total_checked=sync_result.get("users_processed", 0),
-                users_synced=sync_result.get("users_synced", 0),
-                subs_synced=sync_result.get("subs_synced", 0)
-            )
-            await bot.send_message(target_chat_id, _("sync_completed", status="Success", details=final_message))
+            await bot.send_message(target_chat_id, _("sync_success_simple"))
         
         # Send notification to log channel with proper thread handling
         try:
-            await notify_admin_panel_sync(
-                bot, settings, i18n, status, details,
+            notification_service = NotificationService(bot, settings, i18n)
+            await notification_service.notify_panel_sync(
+                status, details,
                 sync_result.get("users_processed", 0),
                 sync_result.get("subs_synced", 0)
             )
@@ -311,12 +338,13 @@ async def sync_command_handler(
             
     except Exception as e_sync_global:
         logging.error(f"Global error during /sync command: {e_sync_global}", exc_info=True)
-        await bot.send_message(target_chat_id, _("sync_failed", details=str(e_sync_global)))
+        await bot.send_message(target_chat_id, _("sync_critical_error"))
         
         # Send notification to log channel about failure
         try:
-            await notify_admin_panel_sync(
-                bot, settings, i18n, "failed", str(e_sync_global), 0, 0
+            notification_service = NotificationService(bot, settings, i18n)
+            await notification_service.notify_panel_sync(
+                "failed", str(e_sync_global), 0, 0
             )
         except Exception as e_notification:
             logging.error(f"Failed to send sync failure notification: {e_notification}")

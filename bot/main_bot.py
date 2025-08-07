@@ -1,17 +1,10 @@
 import logging
 import asyncio
-from typing import Callable, Dict, Any, Awaitable, Optional
+from typing import Dict, Any, Optional
 
-from aiogram import Bot, Dispatcher, BaseMiddleware, Router, F
-from aiogram.types import (
-    Update,
-    MenuButtonDefault,
-    MenuButtonWebApp,
-    WebAppInfo,
-    BotCommand,
-)
+from aiogram import Bot, Dispatcher
+from aiogram.types import (MenuButtonDefault, MenuButtonWebApp, WebAppInfo, BotCommand)
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart, Command
 from aiogram.client.default import DefaultBotProperties
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -24,13 +17,11 @@ from config.settings import Settings
 from db.database_setup import init_db_connection
 
 from bot.middlewares.i18n import I18nMiddleware, get_i18n_instance, JsonI18n
+from bot.middlewares.db_session import DBSessionMiddleware
 from bot.middlewares.ban_check_middleware import BanCheckMiddleware
 from bot.middlewares.action_logger_middleware import ActionLoggerMiddleware
 
-from bot.handlers.user import user_router_aggregate
-from bot.handlers.admin import admin_router_aggregate
-from bot.handlers import inline_mode
-from bot.filters.admin_filter import AdminFilter
+from bot.routers import build_root_router
 
 from bot.services.yookassa_service import YooKassaService
 from bot.services.panel_api_service import PanelApiService
@@ -46,54 +37,8 @@ from bot.handlers.admin.sync_admin import perform_sync
 from bot.utils.message_queue import init_queue_manager
 
 
-class DBSessionMiddleware(BaseMiddleware):
-
-    def __init__(self, async_session_factory: sessionmaker):
-        super().__init__()
-        self.async_session_factory = async_session_factory
-
-    async def __call__(
-        self,
-        handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]],
-        event: Update,
-        data: Dict[str, Any],
-    ) -> Any:
-        if self.async_session_factory is None:
-            logging.critical("DBSessionMiddleware: async_session_factory is None!")
-            raise RuntimeError(
-                "async_session_factory not provided to DBSessionMiddleware"
-            )
-
-        async with self.async_session_factory() as session:
-            data["session"] = session
-            try:
-                result = await handler(event, data)
-
-                await session.commit()
-                return result
-            except Exception:
-                await session.rollback()
-                logging.error(
-                    "DBSessionMiddleware: Exception caused rollback.", exc_info=True
-                )
-                raise
-
-
 async def register_all_routers(dp: Dispatcher, settings: Settings):
-    dp.include_router(user_router_aggregate)
-    
-    # Add inline mode router (available for all users)
-    dp.include_router(inline_mode.router)
-
-    admin_main_router = Router(name="admin_main_filtered_router")
-    admin_filter_instance = AdminFilter(admin_ids=settings.ADMIN_IDS)
-
-    admin_main_router.message.filter(admin_filter_instance)
-    admin_main_router.callback_query.filter(admin_filter_instance)
-
-    admin_main_router.include_router(admin_router_aggregate)
-
-    dp.include_router(admin_main_router)
+    dp.include_router(build_root_router(settings))
     logging.info("All application routers registered.")
 
 

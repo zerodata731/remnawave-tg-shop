@@ -34,10 +34,7 @@ class SubscriptionService:
             else self.settings.DEFAULT_LANGUAGE
         )
 
-    async def has_had_any_subscription(
-        self, session: AsyncSession, user_id: int
-    ) -> bool:
-
+    async def has_had_any_subscription(self, session: AsyncSession, user_id: int) -> bool:
         return await subscription_dal.has_any_subscription_for_user(session, user_id)
 
     async def _notify_admin_panel_user_creation_failed(self, user_id: int):
@@ -348,19 +345,12 @@ class SubscriptionService:
                 "message_key": "trial_activation_failed_db",
             }
 
-        panel_update_payload: Dict[str, Any] = {
-            "uuid": panel_user_uuid,
-            "expireAt": end_date.isoformat(timespec="milliseconds").replace(
-                "+00:00", "Z"
-            ),
-            "status": "ACTIVE",
-            "trafficLimitBytes": self.settings.trial_traffic_limit_bytes,
-            "trafficLimitStrategy": self.settings.USER_TRAFFIC_STRATEGY,
-        }
-        if self.settings.parsed_user_squad_uuids:
-            panel_update_payload["activeInternalSquads"] = (
-                self.settings.parsed_user_squad_uuids
-            )
+        panel_update_payload = self._build_panel_update_payload(
+            panel_user_uuid=panel_user_uuid,
+            expire_at=end_date,
+            status="ACTIVE",
+            traffic_limit_bytes=self.settings.trial_traffic_limit_bytes,
+        )
 
         updated_panel_user = await self.panel_service.update_user_details_on_panel(
             panel_user_uuid, panel_update_payload
@@ -495,19 +485,12 @@ class SubscriptionService:
             )
             return None
 
-        panel_update_payload = {
-            "uuid": panel_user_uuid,
-            "expireAt": final_end_date.isoformat(timespec="milliseconds").replace(
-                "+00:00", "Z"
-            ),
-            "status": "ACTIVE",
-            "trafficLimitBytes": self.settings.user_traffic_limit_bytes,
-            "trafficLimitStrategy": self.settings.USER_TRAFFIC_STRATEGY,
-        }
-        if self.settings.parsed_user_squad_uuids:
-            panel_update_payload["activeInternalSquads"] = (
-                self.settings.parsed_user_squad_uuids
-            )
+        panel_update_payload = self._build_panel_update_payload(
+            panel_user_uuid=panel_user_uuid,
+            expire_at=final_end_date,
+            status="ACTIVE",
+            traffic_limit_bytes=self.settings.user_traffic_limit_bytes,
+        )
 
         updated_panel_user = await self.panel_service.update_user_details_on_panel(
             panel_user_uuid, panel_update_payload
@@ -598,17 +581,13 @@ class SubscriptionService:
 
         if updated_sub_model:
             # Prepare panel update payload
-            panel_update_payload = {
-                "expireAt": new_end_date_obj.isoformat(
-                    timespec="milliseconds"
-                ).replace("+00:00", "Z")
-            }
-            
-            # For promo code activations, remove traffic limit
-            if "promo code" in reason.lower():
-                panel_update_payload["trafficLimitBytes"] = self.settings.user_traffic_limit_bytes
-                panel_update_payload["trafficLimitStrategy"] = self.settings.USER_TRAFFIC_STRATEGY
-                logging.info(f"Updating traffic limit for user {user_id} to {self.settings.user_traffic_limit_bytes} bytes due to promo code activation")
+            panel_update_payload = self._build_panel_update_payload(
+                expire_at=new_end_date_obj,
+                traffic_limit_bytes=(
+                    self.settings.user_traffic_limit_bytes if "promo code" in reason.lower() else None
+                ),
+                include_uuid=False,
+            )
             
             panel_update_success = (
                 await self.panel_service.update_user_details_on_panel(
@@ -775,3 +754,27 @@ class SubscriptionService:
             logging.warning(
                 f"Could not find subscription for user {user_id} ending at {subscription_end_date.isoformat()} to update notification time."
             )
+
+    # Helpers
+    def _build_panel_update_payload(
+        self,
+        *,
+        panel_user_uuid: Optional[str] = None,
+        expire_at: Optional[datetime] = None,
+        status: Optional[str] = None,
+        traffic_limit_bytes: Optional[int] = None,
+        include_uuid: bool = True,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {}
+        if include_uuid and panel_user_uuid:
+            payload["uuid"] = panel_user_uuid
+        if expire_at is not None:
+            payload["expireAt"] = expire_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        if status is not None:
+            payload["status"] = status
+        if traffic_limit_bytes is not None:
+            payload["trafficLimitBytes"] = traffic_limit_bytes
+            payload["trafficLimitStrategy"] = self.settings.USER_TRAFFIC_STRATEGY
+        if self.settings.parsed_user_squad_uuids:
+            payload["activeInternalSquads"] = self.settings.parsed_user_squad_uuids
+        return payload
