@@ -96,10 +96,17 @@ class TributeService:
         period_val = data.get("period")
         months = convert_period_to_months(period_val)
 
-        # Price/amount from spec is integer cents in currency; we store float in Payment
+        # Tribute sends amount in minor units (kopecks/cents). Convert to major units before persisting.
         amount_value = data.get("amount") or data.get("price")
         currency = (data.get("currency") or settings.DEFAULT_CURRENCY_SYMBOL or "RUB").upper()
-        amount_float = float(amount_value) if amount_value is not None else 0.0
+        if amount_value is not None:
+            try:
+                amount_minor_units = float(amount_value)
+            except (TypeError, ValueError):
+                amount_minor_units = 0.0
+            amount_float = round(amount_minor_units / 100.0, 2)
+        else:
+            amount_float = 0.0
 
         async with async_session_factory() as session:
             if event_name == "new_subscription":
