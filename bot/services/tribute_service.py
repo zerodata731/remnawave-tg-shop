@@ -110,8 +110,19 @@ class TributeService:
 
         async with async_session_factory() as session:
             if event_name == "new_subscription":
-                # Build a stable provider payment id from subscription and timestamps
-                provider_payment_id = str(data.get("subscription_id"))
+                # Use a unique, idempotent provider payment id per webhook event
+                # Prefer explicit event/payment identifiers if present; otherwise fall back to payload hash suffix
+                candidate_event_id = (
+                    str(data.get("event_id") or data.get("payment_id") or data.get("purchase_id") or data.get("invoice_id") or "")
+                )
+                if candidate_event_id:
+                    provider_payment_id = candidate_event_id
+                else:
+                    # Combine subscription_id (if any) with a stable hash of the raw payload to ensure uniqueness per event
+                    sub_id_part = str(data.get("subscription_id") or "sub")
+                    payload_hash = hashlib.sha256(raw_body).hexdigest()[:16]
+                    provider_payment_id = f"{sub_id_part}:{payload_hash}"
+
                 # Idempotent ensure payment
                 payment_record = await payment_dal.ensure_payment_with_provider_id(
                     session,
