@@ -65,18 +65,30 @@ class TributeService:
         subscription_service = self.subscription_service
         referral_service = self.referral_service
 
+        def ok(data: Optional[dict] = None) -> web.Response:
+            payload = {"status": "ok"}
+            if data:
+                payload.update(data)
+            return web.json_response(payload, status=200)
+
+        def ignored(reason: str) -> web.Response:
+            return web.json_response({"status": "ignored", "reason": reason}, status=200)
+
+        def bad_request(reason: str) -> web.Response:
+            return web.json_response({"status": "error", "reason": reason}, status=400)
+
         if settings.TRIBUTE_API_KEY:
             if not signature_header:
-                return web.Response(status=403, text="no_signature")
+                return web.json_response({"status": "error", "reason": "no_signature"}, status=403)
             expected_sig = hmac.new(settings.TRIBUTE_API_KEY.encode(), raw_body,
                                     hashlib.sha256).hexdigest()
             if not hmac.compare_digest(expected_sig, signature_header):
-                return web.Response(status=403, text="invalid_signature")
+                return web.json_response({"status": "error", "reason": "invalid_signature"}, status=403)
 
         try:
             payload = json.loads(raw_body.decode())
         except Exception:
-            return web.Response(status=400, text="bad_request")
+            return bad_request("invalid_json")
 
         logging.info(
             "Tribute webhook data: %s",
@@ -91,7 +103,8 @@ class TributeService:
         # Mandatory routing fields
         user_id = data.get("telegram_user_id")
         if not user_id:
-            return web.Response(status=400, text="missing_telegram_user_id")
+            # Permanent format issue — acknowledge to avoid retries
+            return ignored("missing_telegram_user_id")
 
         period_val = data.get("period")
         months = convert_period_to_months(period_val)
@@ -110,8 +123,19 @@ class TributeService:
 
         async with async_session_factory() as session:
             if event_name == "new_subscription":
-                # Build a stable provider payment id from subscription and timestamps
-                provider_payment_id = str(data.get("subscription_id"))
+                # Use a unique, idempotent provider payment id per webhook event
+                # Prefer explicit event/payment identifiers if present; otherwise fall back to payload hash suffix
+                candidate_event_id = (
+                    str(data.get("event_id") or data.get("payment_id") or data.get("purchase_id") or data.get("invoice_id") or "")
+                )
+                if candidate_event_id:
+                    provider_payment_id = candidate_event_id
+                else:
+                    # Combine subscription_id (if any) with a stable hash of the raw payload to ensure uniqueness per event
+                    sub_id_part = str(data.get("subscription_id") or "sub")
+                    payload_hash = hashlib.sha256(raw_body).hexdigest()[:16]
+                    provider_payment_id = f"{sub_id_part}:{payload_hash}"
+
                 # Idempotent ensure payment
                 payment_record = await payment_dal.ensure_payment_with_provider_id(
                     session,
@@ -210,7 +234,8 @@ class TributeService:
                 
             else:
                 await session.commit()
-        return web.Response(status=200, text="ok")
+        # Acknowledge to Tribute that webhook was received and processed/accepted
+        return ok({"event": event_name or "unknown"})
 
     async def _handle_tribute_cancellation(self, session, user_id: int, bot: Bot, i18n: JsonI18n):
         """Handle tribute subscription cancellation - set subscription to 1 day grace period"""
