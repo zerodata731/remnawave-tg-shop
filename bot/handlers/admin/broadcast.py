@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from aiogram import Router, F, types, Bot
-from aiogram.exceptions import TelegramRetryAfter
+from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
 
 from aiogram.fsm.context import FSMContext
 from typing import Optional
@@ -65,6 +65,7 @@ async def process_broadcast_message_handler(
     i18n_data: dict,
     settings: Settings,
     session: AsyncSession,
+    bot: Bot,
 ):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
@@ -82,6 +83,31 @@ async def process_broadcast_message_handler(
     # Если текст пустой (например, прислали стикер/фото без подписи) — просим ввести текст
     if not text:
         await message.answer(_("admin_broadcast_error_no_message"))
+        return
+
+    # Предварительная проверка HTML: попробуем отправить и сразу удалить
+    # Если HTML некорректный, Telegram вернёт ошибку парсинга
+    try:
+        test_msg = await bot.send_message(
+            chat_id=message.chat.id,
+            text=text,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            disable_notification=True,
+        )
+        # Удалим тестовое сообщение
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=test_msg.message_id)
+        except Exception:
+            pass
+    except TelegramBadRequest as e:
+        await message.answer(
+            _(
+                "admin_broadcast_invalid_html",
+                default="❌ Некорректный HTML в сообщении. Пожалуйста, отправьте корректный HTML (поддерживаются теги Telegram) или уберите теги.\nОшибка: {error}",
+                error=str(e),
+            )
+        )
         return
 
     await state.update_data(
@@ -190,6 +216,7 @@ async def confirm_broadcast_callback_handler(
                     chat_id=uid,
                     text=text,
                     entities=entities,
+                    parse_mode=None,  # переопределяем глобальный HTML, т.к. используем entities
                 )
                 sent_count += 1
                 
