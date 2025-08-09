@@ -165,6 +165,8 @@
   "admin_broadcast_cancelled_alert": "Broadcast cancelled!",
   "admin_broadcast_cancelled_nav_back": "Broadcast cancelled. You are returned to the admin panel.",
 
+  "admin_broadcast_invalid_html": "❌ Invalid HTML in message. Please send valid HTML (Telegram-supported tags) or remove tags.",
+
   "admin_promo_create_prompt": "Enter promo details in the format: CODE BONUS_DAYS MAX_USES [VALIDITY_DAYS]\nExample: <code>{example_format}</code>\n(Validity is optional; default is indefinite)",
   "admin_promo_invalid_format": "Invalid format. Please use: CODE BONUS_DAYS MAX_USES [VALIDITY_DAYS]",
   "admin_promo_invalid_code_format": "Code must be 3–30 alphanumeric characters.",
