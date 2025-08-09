@@ -58,7 +58,7 @@ async def broadcast_message_prompt_handler(
     await state.set_state(AdminStates.waiting_for_broadcast_message)
 
 
-@router.message(AdminStates.waiting_for_broadcast_message, F.text)
+@router.message(AdminStates.waiting_for_broadcast_message)
 async def process_broadcast_message_handler(
     message: types.Message,
     state: FSMContext,
@@ -76,8 +76,13 @@ async def process_broadcast_message_handler(
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
     # Сохраняем в state исходный текст и entities
-    text = message.text or message.caption or ""
+    text = (message.text or message.caption or "").strip()
     entities = message.entities or message.caption_entities or []
+
+    # Если текст пустой (например, прислали стикер/фото без подписи) — просим ввести текст
+    if not text:
+        await message.answer(_("admin_broadcast_error_no_message"))
+        return
 
     await state.update_data(
         broadcast_text=text,
