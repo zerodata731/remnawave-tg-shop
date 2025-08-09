@@ -215,8 +215,8 @@ async def confirm_broadcast_callback_handler(
                 await queue_manager.send_message(
                     chat_id=uid,
                     text=text,
-                    entities=entities,
-                    parse_mode=None,  # переопределяем глобальный HTML, т.к. используем entities
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
                 )
                 sent_count += 1
                 
