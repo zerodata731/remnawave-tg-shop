@@ -20,6 +20,7 @@ from bot.middlewares.i18n import I18nMiddleware, get_i18n_instance, JsonI18n
 from bot.middlewares.db_session import DBSessionMiddleware
 from bot.middlewares.ban_check_middleware import BanCheckMiddleware
 from bot.middlewares.action_logger_middleware import ActionLoggerMiddleware
+from bot.middlewares.profile_sync import ProfileSyncMiddleware
 
 from bot.routers import build_root_router
 
@@ -314,6 +315,8 @@ async def run_bot(settings_param: Settings):
     dp.update.outer_middleware(
         I18nMiddleware(i18n=i18n_instance, settings=settings_param)
     )
+    # Keep profile data in DB fresh (username/first_name/last_name)
+    dp.update.outer_middleware(ProfileSyncMiddleware())
     dp.update.outer_middleware(
         BanCheckMiddleware(settings=settings_param, i18n_instance=i18n_instance)
     )
