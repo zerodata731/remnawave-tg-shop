@@ -142,7 +142,11 @@ class CryptoPayService:
                     provider="cryptopay",
                 )
                 referral_bonus = await referral_service.apply_referral_bonuses_for_payment(
-                    session, user_id, months
+                    session,
+                    user_id,
+                    months,
+                    current_payment_db_id=payment_db_id,
+                    skip_if_active_before_payment=True,
                 )
                 await session.commit()
             except Exception as e:

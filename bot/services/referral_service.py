@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 
 from config.settings import Settings
 from db.dal import user_dal
+from db.dal import payment_dal
 from db.models import User
 from db.dal import subscription_dal
 from bot.middlewares.i18n import JsonI18n
@@ -24,8 +25,12 @@ class ReferralService:
         self.i18n = i18n
 
     async def apply_referral_bonuses_for_payment(
-            self, session: AsyncSession, referee_user_id: int,
-            purchased_subscription_months: int) -> Dict[str, Any]:
+            self,
+            session: AsyncSession,
+            referee_user_id: int,
+            purchased_subscription_months: int,
+            current_payment_db_id: Optional[int] = None,
+            skip_if_active_before_payment: bool = True) -> Dict[str, Any]:
 
         referee_final_end_date: Optional[datetime] = None
         referee_bonus_applied_days: Optional[int] = None
@@ -42,6 +47,37 @@ class ReferralService:
                     "referee_bonus_applied_days": None,
                     "referee_new_end_date": None
                 }
+
+            # If configured to apply referral bonuses only once per invited user,
+            # check if the referee already has succeeded payments.
+            if self.settings.REFERRAL_ONE_BONUS_PER_REFEREE:
+                try:
+                    succeeded_count = await payment_dal.count_user_succeeded_payments(
+                        session, referee_user_id, exclude_payment_id=current_payment_db_id
+                    )
+                    if succeeded_count and succeeded_count > 0:
+                        logging.info(
+                            f"Referral bonuses skipped for user {referee_user_id}: already has {succeeded_count} succeeded payments.")
+                        return {
+                            "referee_bonus_applied_days": None,
+                            "referee_new_end_date": None
+                        }
+                except Exception as e_cnt:
+                    logging.error(f"Failed counting succeeded payments for user {referee_user_id}: {e_cnt}")
+
+            # Additionally, do not award referral bonuses if the user was active at payment time
+            # (has an active subscription now). This avoids giving bonuses to already active users.
+            if skip_if_active_before_payment:
+                try:
+                    if await self.subscription_service.has_active_subscription(session, referee_user_id):
+                        logging.info(
+                            f"Referral bonuses skipped for user {referee_user_id}: user currently has an active subscription.")
+                        return {
+                            "referee_bonus_applied_days": None,
+                            "referee_new_end_date": None
+                        }
+                except Exception as e_sub:
+                    logging.error(f"Failed to check active subscription for {referee_user_id}: {e_sub}")
 
             inviter_user_id = referee_user_model.referred_by_id
             inviter_user_model = await user_dal.get_user_by_id(
