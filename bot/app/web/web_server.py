@@ -31,8 +31,9 @@ async def build_and_start_web_app(
         "tribute_service",
         "panel_webhook_service",
     ):
-        if key in dp:  # type: ignore
-            app[key] = dp[key]  # type: ignore
+        # Access dispatcher workflow_data directly to avoid sequence protocol issues
+        if hasattr(dp, "workflow_data") and key in dp.workflow_data:  # type: ignore
+            app[key] = dp.workflow_data[key]  # type: ignore
 
     setup_application(app, dp, bot=bot)
 

@@ -260,8 +260,13 @@ async def run_bot(settings_param: Settings):
     dp["panel_service"] = services["panel_service"]
     dp["async_session_factory"] = local_async_session_factory
 
-    dp.startup.register(on_startup_configured)
-    dp.shutdown.register(on_shutdown_configured)
+    # Wrap startup/shutdown handlers to satisfy aiogram event signature (no args passed)
+    async def _on_startup_wrapper():
+        await on_startup_configured(dp)
+    async def _on_shutdown_wrapper():
+        await on_shutdown_configured(dp)
+    dp.startup.register(_on_startup_wrapper)
+    dp.shutdown.register(_on_shutdown_wrapper)
 
     await register_all_routers(dp, settings_param)
 
