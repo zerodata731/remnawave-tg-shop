@@ -260,12 +260,47 @@ def get_confirmation_keyboard(yes_callback_data: str, no_callback_data: str,
 
 
 def get_broadcast_confirmation_keyboard(lang: str,
-                                        i18n_instance) -> InlineKeyboardMarkup:
+                                        i18n_instance,
+                                        target: str = "all") -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
-    builder.button(text=_(key="confirm_broadcast_send_button"),
+
+    # Row: target selection (all / active / inactive)
+    target_all_label = _(
+        key="broadcast_target_all_button",
+        default="👥 Все"
+    )
+    target_active_label = _(
+        key="broadcast_target_active_button",
+        default="✅ Активные"
+    )
+    target_inactive_label = _(
+        key="broadcast_target_inactive_button",
+        default="⌛ Неактивные"
+    )
+
+    # Highlight current selection with a prefix
+    def mark_selected(label: str, is_selected: bool) -> str:
+        return ("• " + label) if is_selected else label
+
+    builder.button(
+        text=mark_selected(target_all_label, target == "all"),
+        callback_data="broadcast_target:all",
+    )
+    builder.button(
+        text=mark_selected(target_active_label, target == "active"),
+        callback_data="broadcast_target:active",
+    )
+    builder.button(
+        text=mark_selected(target_inactive_label, target == "inactive"),
+        callback_data="broadcast_target:inactive",
+    )
+    builder.adjust(3)
+
+    # Row: confirmation
+    builder.button(text=_(key="confirm_broadcast_send_button", default="🚀 Отправить"),
                    callback_data="broadcast_final_action:send")
-    builder.button(text=_(key="cancel_broadcast_button"),
+    builder.button(text=_(key="cancel_broadcast_button", default="❌ Отмена"),
                    callback_data="broadcast_final_action:cancel")
     builder.adjust(2)
     return builder.as_markup()

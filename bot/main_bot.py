@@ -21,6 +21,9 @@ from bot.middlewares.db_session import DBSessionMiddleware
 from bot.middlewares.ban_check_middleware import BanCheckMiddleware
 from bot.middlewares.action_logger_middleware import ActionLoggerMiddleware
 from bot.middlewares.profile_sync import ProfileSyncMiddleware
+from bot.app.controllers.dispatcher_controller import build_dispatcher
+from bot.app.factories.build_services import build_core_services
+from bot.app.web.web_server import build_and_start_web_app
 
 from bot.routers import build_root_router
 
@@ -225,19 +228,16 @@ async def on_shutdown_configured(dispatcher: Dispatcher):
 
 
 async def run_bot(settings_param: Settings):
-    storage = MemoryStorage()
-    default_props = DefaultBotProperties(parse_mode=ParseMode.HTML)
-    bot = Bot(token=settings_param.BOT_TOKEN, default=default_props)
-
     local_async_session_factory = init_db_connection(settings_param)
     if local_async_session_factory is None:
         logging.critical(
             "Failed to initialize database connection and session factory. Exiting."
         )
         return
+    dp, bot, extra = build_dispatcher(settings_param, local_async_session_factory)
+    i18n_instance = extra["i18n_instance"]
 
-    dp = Dispatcher(storage=storage, settings=settings_param, bot_instance=bot)
-
+    # Get bot username for YooKassa default return URL if needed
     actual_bot_username = "your_bot_username"
     try:
         bot_info = await bot.get_me()
@@ -248,82 +248,19 @@ async def run_bot(settings_param: Settings):
             f"Failed to get bot info (e.g., for YooKassa default URL): {e}. Using fallback: {actual_bot_username}"
         )
 
-    i18n_instance = get_i18n_instance(
-        path="locales", default=settings_param.DEFAULT_LANGUAGE
-    )
-
-    yookassa_service = YooKassaService(
-        shop_id=settings_param.YOOKASSA_SHOP_ID,
-        secret_key=settings_param.YOOKASSA_SECRET_KEY,
-        configured_return_url=settings_param.YOOKASSA_RETURN_URL,
-        bot_username_for_default_return=actual_bot_username,
-        settings_obj=settings_param,
-    )
-    panel_service = PanelApiService(settings_param)
-
-    subscription_service = SubscriptionService(
-        settings_param, panel_service, bot, i18n_instance
-    )
-    referral_service = ReferralService(
-        settings_param, subscription_service, bot, i18n_instance
-    )
-    promo_code_service = PromoCodeService(
-        settings_param, subscription_service, bot, i18n_instance
-    )
-    stars_service = StarsService(
-        bot, settings_param, i18n_instance, subscription_service, referral_service
-    )
-    cryptopay_service = CryptoPayService(
-        settings_param.CRYPTOPAY_TOKEN,
-        settings_param.CRYPTOPAY_NETWORK,
-        bot,
+    services = build_core_services(
         settings_param,
-        i18n_instance,
-        local_async_session_factory,
-        subscription_service,
-        referral_service,
-    )
-    tribute_service = TributeService(
         bot,
-        settings_param,
-        i18n_instance,
         local_async_session_factory,
-        panel_service,
-        subscription_service,
-        referral_service,
-    )
-    panel_webhook_service = PanelWebhookService(
-        bot,
-        settings_param,
         i18n_instance,
-        local_async_session_factory,
+        actual_bot_username,
     )
-
-    dp["i18n_instance"] = i18n_instance
-    dp["yookassa_service"] = yookassa_service
-    dp["panel_service"] = panel_service
-    dp["subscription_service"] = subscription_service
-    dp["referral_service"] = referral_service
-    dp["promo_code_service"] = promo_code_service
-    dp["stars_service"] = stars_service
-    dp["cryptopay_service"] = cryptopay_service
-    dp["tribute_service"] = tribute_service
-    dp["panel_webhook_service"] = panel_webhook_service
+    for key, service in services.items():
+        dp[key] = service
+    dp["panel_service"] = services["panel_service"]
     dp["async_session_factory"] = local_async_session_factory
 
-    dp.update.outer_middleware(DBSessionMiddleware(local_async_session_factory))
-    dp.update.outer_middleware(
-        I18nMiddleware(i18n=i18n_instance, settings=settings_param)
-    )
-    # Keep profile data in DB fresh (username/first_name/last_name)
-    dp.update.outer_middleware(ProfileSyncMiddleware())
-    dp.update.outer_middleware(
-        BanCheckMiddleware(settings=settings_param, i18n_instance=i18n_instance)
-    )
-    dp.update.outer_middleware(ActionLoggerMiddleware(settings=settings_param))
-
     dp.startup.register(on_startup_configured)
-    # Register shutdown callback directly so Dispatcher instance is provided
     dp.shutdown.register(on_shutdown_configured)
 
     await register_all_routers(dp, settings_param)
@@ -353,88 +290,10 @@ async def run_bot(settings_param: Settings):
     main_tasks = []
 
     if should_run_aiohttp_server:
-        app = web.Application()
-        app["bot"] = bot
-        app["dp"] = dp
-        app["settings"] = settings_param
-        app["i18n"] = i18n_instance
-        app["async_session_factory"] = local_async_session_factory
-
-        app["yookassa_service"] = yookassa_service
-        app["subscription_service"] = subscription_service
-        app["referral_service"] = referral_service
-        app["panel_service"] = panel_service
-        app["stars_service"] = stars_service
-        app["cryptopay_service"] = cryptopay_service
-        app["tribute_service"] = tribute_service
-        app["panel_webhook_service"] = panel_webhook_service
-
-        setup_application(app, dp, bot=bot)
-
-        if telegram_uses_webhook_mode:
-            telegram_webhook_path = f"/{settings_param.BOT_TOKEN}"
-            if not telegram_webhook_path.startswith("/"):
-                telegram_webhook_path = "/" + telegram_webhook_path
-            app.router.add_post(
-                telegram_webhook_path, SimpleRequestHandler(dispatcher=dp, bot=bot)
-            )
-            logging.info(
-                f"Telegram webhook route configured at: [POST] {telegram_webhook_path} (relative to base URL)"
-            )
-
-        if yk_webhook_base and settings_param.yookassa_webhook_path:
-            yk_path = settings_param.yookassa_webhook_path
-            if not yk_path or not isinstance(yk_path, str):
-                logging.error(
-                    f"YooKassa webhook path is invalid or not configured in settings: {yk_path}. Skipping YooKassa webhook setup."
-                )
-            elif not yk_path.startswith("/"):
-                logging.error(
-                    f"CRITICAL: YooKassa webhook path '{yk_path}' from settings does not start with '/'. Correct settings.py or .env. Skipping YooKassa webhook."
-                )
-            else:
-                app.router.add_post(
-                    yk_path, user_payment_webhook_module.yookassa_webhook_route
-                )
-                logging.info(f"YooKassa webhook route configured at: [POST] {yk_path}")
-
-        tribute_path = settings_param.tribute_webhook_path
-        if tribute_path.startswith("/"):
-            app.router.add_post(tribute_path, tribute_webhook_route)
-            logging.info(f"Tribute webhook route configured at: [POST] {tribute_path}")
-
-        cp_path = settings_param.cryptopay_webhook_path
-        if cp_path.startswith("/"):
-            app.router.add_post(cp_path, cryptopay_webhook_route)
-            logging.info(f"CryptoPay webhook route configured at: [POST] {cp_path}")
-
-        panel_path = settings_param.panel_webhook_path
-        if panel_path.startswith("/"):
-            app.router.add_post(panel_path, panel_webhook_route)
-            logging.info(f"Panel webhook route configured at: [POST] {panel_path}")
-
-        web_app_runner = web.AppRunner(app)
-        await web_app_runner.setup()
-        site = web.TCPSite(
-            web_app_runner,
-            host=settings_param.WEB_SERVER_HOST,
-            port=settings_param.WEB_SERVER_PORT,
-        )
-
         async def web_server_task():
-            await site.start()
-            logging.info(
-                f"AIOHTTP server started on http://{settings_param.WEB_SERVER_HOST}:{settings_param.WEB_SERVER_PORT}"
-            )
-            (
-                await asyncio.Event().wait()
-                if not run_telegram_polling
-                else await asyncio.sleep(31536000)
-            )
+            await build_and_start_web_app(dp, bot, settings_param, local_async_session_factory)
 
-        main_tasks.append(
-            asyncio.create_task(web_server_task(), name="AIOHTTPServerTask")
-        )
+        main_tasks.append(asyncio.create_task(web_server_task(), name="AIOHTTPServerTask"))
 
     if run_telegram_polling:
         logging.info("Starting bot in Telegram Polling mode...")

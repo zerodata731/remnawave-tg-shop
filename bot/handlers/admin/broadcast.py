@@ -113,15 +113,56 @@ async def process_broadcast_message_handler(
     await state.update_data(
         broadcast_text=text,
         broadcast_entities=entities,
+        broadcast_target="all",
     )
 
     confirmation_prompt = _("admin_broadcast_confirm_prompt", message_preview=text)
 
     await message.answer(
         confirmation_prompt,
-        reply_markup=get_broadcast_confirmation_keyboard(current_lang, i18n),
+        reply_markup=get_broadcast_confirmation_keyboard(current_lang, i18n, target="all"),
     )
     await state.set_state(AdminStates.confirming_broadcast)
+
+
+@router.callback_query(
+    F.data.startswith("broadcast_target:"),
+    AdminStates.confirming_broadcast,
+)
+async def change_broadcast_target_handler(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    i18n_data: dict,
+    settings: Settings,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Error updating selection.", show_alert=True)
+        return
+
+    new_target = callback.data.split(":")[1]
+    if new_target not in {"all", "active", "inactive"}:
+        await callback.answer("Unknown target.", show_alert=True)
+        return
+
+    await state.update_data(broadcast_target=new_target)
+    user_fsm_data = await state.get_data()
+    text = user_fsm_data.get("broadcast_text", "")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+    confirmation_prompt = _(
+        "admin_broadcast_confirm_prompt", message_preview=text
+    )
+    try:
+        await callback.message.edit_text(
+            confirmation_prompt,
+            reply_markup=get_broadcast_confirmation_keyboard(
+                current_lang, i18n, target=new_target
+            ),
+        )
+    except Exception:
+        pass
+    await callback.answer()
 
 
 @router.callback_query(
@@ -194,7 +235,13 @@ async def confirm_broadcast_callback_handler(
         await callback.message.edit_text(_("admin_broadcast_sending_started"), reply_markup=None)
         await callback.answer()
 
-        user_ids = await user_dal.get_all_active_user_ids_for_broadcast(session)
+        target = user_fsm_data.get("broadcast_target", "all")
+        if target == "active":
+            user_ids = await user_dal.get_user_ids_with_active_subscription(session)
+        elif target == "inactive":
+            user_ids = await user_dal.get_user_ids_without_active_subscription(session)
+        else:
+            user_ids = await user_dal.get_all_active_user_ids_for_broadcast(session)
 
         sent_count = 0
         failed_count = 0

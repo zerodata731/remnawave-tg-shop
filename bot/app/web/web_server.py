@@ -19,6 +19,20 @@ async def build_and_start_web_app(
     app["dp"] = dp
     app["settings"] = settings
     app["async_session_factory"] = async_session_factory
+    # Inject shared instances used by webhook handlers
+    app["i18n"] = dp.get("i18n_instance")
+    for key in (
+        "yookassa_service",
+        "subscription_service",
+        "referral_service",
+        "panel_service",
+        "stars_service",
+        "cryptopay_service",
+        "tribute_service",
+        "panel_webhook_service",
+    ):
+        if key in dp:  # type: ignore
+            app[key] = dp[key]  # type: ignore
 
     setup_application(app, dp, bot=bot)
 
@@ -31,6 +45,7 @@ async def build_and_start_web_app(
             f"Telegram webhook route configured at: [POST] {telegram_webhook_path} (relative to base URL)"
         )
 
+    from bot.handlers.user.payment import yookassa_webhook_route
     from bot.services.tribute_service import tribute_webhook_route
     from bot.services.crypto_pay_service import cryptopay_webhook_route
     from bot.services.panel_webhook_service import panel_webhook_route
@@ -44,6 +59,12 @@ async def build_and_start_web_app(
     if cp_path.startswith("/"):
         app.router.add_post(cp_path, cryptopay_webhook_route)
         logging.info(f"CryptoPay webhook route configured at: [POST] {cp_path}")
+
+    # YooKassa webhook (register only when base URL present and path configured)
+    yk_path = settings.yookassa_webhook_path
+    if settings.WEBHOOK_BASE_URL and yk_path and yk_path.startswith("/"):
+        app.router.add_post(yk_path, yookassa_webhook_route)
+        logging.info(f"YooKassa webhook route configured at: [POST] {yk_path}")
 
     panel_path = settings.panel_webhook_path
     if panel_path.startswith("/"):

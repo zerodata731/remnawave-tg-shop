@@ -155,3 +155,52 @@ async def get_enhanced_user_statistics(session: AsyncSession) -> Dict[str, Any]:
         "inactive_users": max(0, inactive_users),
         "referral_users": referral_users
     }
+
+
+async def get_user_ids_with_active_subscription(session: AsyncSession) -> List[int]:
+    """Return non-banned user IDs who have an active subscription (paid or trial)."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    stmt = (
+        select(func.distinct(Subscription.user_id))
+        .join(User, Subscription.user_id == User.user_id)
+        .where(
+            and_(
+                User.is_banned == False,
+                Subscription.is_active == True,
+                Subscription.end_date > now,
+            )
+        )
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+async def get_user_ids_without_active_subscription(session: AsyncSession) -> List[int]:
+    """Return non-banned user IDs who do NOT have any active subscription."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    # Subquery for users with active subscription
+    active_subs_subq = (
+        select(Subscription.user_id)
+        .where(
+            and_(
+                Subscription.is_active == True,
+                Subscription.end_date > now,
+            )
+        )
+    ).scalar_subquery()
+
+    stmt = (
+        select(User.user_id)
+        .where(
+            and_(
+                User.is_banned == False,
+                ~User.user_id.in_(active_subs_subq),
+            )
+        )
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()
