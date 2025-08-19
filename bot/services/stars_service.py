@@ -100,7 +100,7 @@ class StarsService:
             message.from_user.id,
             months,
             current_payment_db_id=payment_db_id,
-            skip_if_active_before_payment=True,
+            skip_if_active_before_payment=False,
         )
         await session.commit()
 
