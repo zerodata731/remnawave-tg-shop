@@ -37,6 +37,22 @@ class SubscriptionService:
     async def has_had_any_subscription(self, session: AsyncSession, user_id: int) -> bool:
         return await subscription_dal.has_any_subscription_for_user(session, user_id)
 
+    async def has_active_subscription(self, session: AsyncSession, user_id: int) -> bool:
+        """Return True if user currently has an active subscription (end_date in future)."""
+        try:
+            user_record = await user_dal.get_user_by_id(session, user_id)
+            if not user_record or not user_record.panel_user_uuid:
+                return False
+            active_sub = await subscription_dal.get_active_subscription_by_user_id(
+                session, user_id, user_record.panel_user_uuid
+            )
+            if not active_sub or not active_sub.end_date:
+                return False
+            from datetime import datetime, timezone
+            return active_sub.is_active and active_sub.end_date > datetime.now(timezone.utc)
+        except Exception:
+            return False
+
     async def _notify_admin_panel_user_creation_failed(self, user_id: int):
         if not self.bot or not self.i18n or not self.settings.ADMIN_IDS:
             return

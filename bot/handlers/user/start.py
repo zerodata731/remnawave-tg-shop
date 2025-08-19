@@ -194,8 +194,15 @@ async def start_command_handler(message: types.Message,
         update_payload = {}
         if db_user.language_code != current_lang:
             update_payload["language_code"] = current_lang
+        # Set referral only if not already set AND user is not currently active.
+        # This allows previously subscribed but currently inactive users to be attributed.
         if referred_by_user_id and db_user.referred_by_id is None:
-            update_payload["referred_by_id"] = referred_by_user_id
+            try:
+                is_active_now = await subscription_service.has_active_subscription(session, user_id)
+            except Exception:
+                is_active_now = False
+            if not is_active_now:
+                update_payload["referred_by_id"] = referred_by_user_id
         if user.username != db_user.username:
             update_payload["username"] = user.username
         if user.first_name != db_user.first_name:

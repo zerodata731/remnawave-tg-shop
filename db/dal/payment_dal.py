@@ -138,6 +138,23 @@ async def get_all_succeeded_payments_with_user(session: AsyncSession) -> List[Pa
     return result.scalars().all()
 
 
+async def count_user_succeeded_payments(
+    session: AsyncSession, user_id: int, exclude_payment_id: Optional[int] = None
+) -> int:
+    """Count succeeded payments for a specific user.
+
+    If exclude_payment_id is provided, that specific payment will be excluded
+    from the count. Useful to check "prior" payments while processing the
+    current payment in the same transaction.
+    """
+    conditions = [Payment.user_id == user_id, Payment.status == 'succeeded']
+    if exclude_payment_id is not None:
+        conditions.append(Payment.payment_id != exclude_payment_id)
+    stmt = select(func.count(Payment.payment_id)).where(and_(*conditions))
+    result = await session.execute(stmt)
+    return result.scalar() or 0
+
+
 async def update_provider_payment_and_status(
         session: AsyncSession, payment_db_id: int,
         provider_payment_id: str, new_status: str) -> Optional[Payment]:

@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     REFERRAL_BONUS_DAYS_REFEREE_12_MONTHS: Optional[int] = Field(
         default=15, alias="REFEREE_BONUS_DAYS_12_MONTHS")
 
+    # Referral program configuration
+    REFERRAL_ONE_BONUS_PER_REFEREE: bool = Field(
+        default=True,
+        description="When true, referral bonuses (for inviter and referee) are applied only once per invited user – on their first successful payment."
+    )
+
     PANEL_API_URL: Optional[str] = None
     PANEL_API_KEY: Optional[str] = None
     USER_TRAFFIC_LIMIT_GB: Optional[float] = Field(default=0.0)

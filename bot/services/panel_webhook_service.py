@@ -42,12 +42,16 @@ class PanelWebhookService:
             logging.error(f"Failed to send notification to {user_id}: {e}")
 
     async def _handle_expired_subscription(self, session, user_id: int, user_payload: dict, 
-                                         lang: str, markup, first_name: str):
-        """Handle expired subscription - auto-renew tribute users if no cancellation was received"""
+                                         lang: str, markup, first_name: str) -> bool:
+        """Handle expired subscription - auto-renew tribute users if no cancellation was received.
+
+        Returns True if an auto-renewal was performed (and renewal message sent), False otherwise.
+        """
         from db.dal import subscription_dal, payment_dal
         from datetime import datetime, timezone, timedelta
         
         try:
+            auto_renewed = False
             # Check if user has tribute subscriptions that weren't cancelled
             user_subs = await subscription_dal.get_active_subscriptions_for_user(session, user_id)
             
@@ -96,14 +100,17 @@ class PanelWebhookService:
                             reply_markup=markup,
                             parse_mode="HTML"
                         )
+                        auto_renewed = True
                     except Exception as e:
                         logging.error(f"Failed to send auto-renewal notification to user {user_id}: {e}")
                         
             await session.commit()
+            return auto_renewed
             
         except Exception as e:
             logging.error(f"Error handling expired subscription for user {user_id}: {e}")
             await session.rollback()
+            return False
 
     async def handle_event(self, event_name: str, user_payload: dict):
         telegram_id = user_payload.get("telegramId")
@@ -135,10 +142,10 @@ class PanelWebhookService:
                 )
         elif event_name == "user.expired":
             # Check if this is a tribute user that should be auto-renewed (regardless of notification settings)
-            await self._handle_expired_subscription(session, user_id, user_payload, lang, markup, first_name)
+            auto_renewed = await self._handle_expired_subscription(session, user_id, user_payload, lang, markup, first_name)
             
-            # Send notification only if enabled
-            if self.settings.SUBSCRIPTION_NOTIFY_ON_EXPIRE:
+            # If auto-renewed via Tribute, suppress expiration notification. Otherwise, send it if enabled.
+            if not auto_renewed and self.settings.SUBSCRIPTION_NOTIFY_ON_EXPIRE:
                 await self._send_message(
                     user_id,
                     lang,
