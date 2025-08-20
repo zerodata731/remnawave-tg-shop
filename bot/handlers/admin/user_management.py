@@ -1,6 +1,7 @@
 import logging
 import re
 from aiogram import Router, F, types, Bot
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.markdown import hcode, hbold
 from typing import Optional, Dict, Any
@@ -578,7 +579,7 @@ async def process_subscription_days_handler(message: types.Message, state: FSMCo
     await state.clear()
 
 
-@router.message(AdminStates.waiting_for_direct_message_to_user, F.text)
+@router.message(AdminStates.waiting_for_direct_message_to_user)
 async def process_direct_message_handler(message: types.Message, state: FSMContext,
                                        settings: Settings, i18n_data: dict,
                                        bot: Bot, session: AsyncSession):
@@ -597,8 +598,9 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
         await state.clear()
         return
 
-    message_text = message.text.strip()
-    if len(message_text) > 4000:
+    # Determine content similar to broadcast
+    text = (message.text or message.caption or "").strip()
+    if len(text) > 4000:
         await message.answer(_(
             "admin_user_message_too_long",
             default="❌ Сообщение слишком длинное (максимум 4000 символов)"
@@ -613,15 +615,127 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
             await state.clear()
             return
 
-        # Prepare message with admin signature
+        # Prepare admin signature and content type
         admin_signature = _(
             "admin_direct_message_signature",
             default="\n\n---\n💬 Сообщение от администратора"
         )
-        full_message = message_text + admin_signature
 
-        # Send message to user
-        await bot.send_message(target_user_id, full_message)
+        content_type = "text"
+        file_id = None
+
+        if message.photo:
+            content_type = "photo"
+            file_id = message.photo[-1].file_id
+        elif message.video:
+            content_type = "video"
+            file_id = message.video.file_id
+        elif message.animation:
+            content_type = "animation"
+            file_id = message.animation.file_id
+        elif message.document:
+            content_type = "document"
+            file_id = message.document.file_id
+        elif message.audio:
+            content_type = "audio"
+            file_id = message.audio.file_id
+        elif message.voice:
+            content_type = "voice"
+            file_id = message.voice.file_id
+        elif message.sticker:
+            content_type = "sticker"
+            file_id = message.sticker.file_id
+        elif message.video_note:
+            content_type = "video_note"
+            file_id = message.video_note.file_id
+
+        if not text and not file_id:
+            await message.answer(_(
+                "admin_direct_empty_message",
+                default="❌ Пустое сообщение. Отправьте текст или медиа."
+            ))
+            return
+
+        caption_with_signature = (text + admin_signature) if text else None
+
+        # Send to target user similar to broadcast
+        try:
+            if content_type == "text":
+                await bot.send_message(
+                    target_user_id,
+                    (caption_with_signature or admin_signature),
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+            elif content_type == "photo":
+                await bot.send_photo(
+                    chat_id=target_user_id,
+                    photo=file_id,
+                    caption=caption_with_signature,
+                    parse_mode="HTML",
+                )
+            elif content_type == "video":
+                await bot.send_video(
+                    chat_id=target_user_id,
+                    video=file_id,
+                    caption=caption_with_signature,
+                    parse_mode="HTML",
+                )
+            elif content_type == "animation":
+                await bot.send_animation(
+                    chat_id=target_user_id,
+                    animation=file_id,
+                    caption=caption_with_signature,
+                    parse_mode="HTML",
+                )
+            elif content_type == "document":
+                await bot.send_document(
+                    chat_id=target_user_id,
+                    document=file_id,
+                    caption=caption_with_signature,
+                    parse_mode="HTML",
+                )
+            elif content_type == "audio":
+                await bot.send_audio(
+                    chat_id=target_user_id,
+                    audio=file_id,
+                    caption=caption_with_signature,
+                    parse_mode="HTML",
+                )
+            elif content_type == "voice":
+                await bot.send_voice(
+                    chat_id=target_user_id,
+                    voice=file_id,
+                    caption=caption_with_signature,
+                    parse_mode="HTML",
+                )
+            elif content_type == "sticker":
+                # Stickers do not support captions; send sticker and then optional signature/text
+                await bot.send_sticker(chat_id=target_user_id, sticker=file_id)
+                if caption_with_signature:
+                    await bot.send_message(
+                        target_user_id,
+                        caption_with_signature,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+            elif content_type == "video_note":
+                # Video notes do not support captions; send media then optional signature/text
+                await bot.send_video_note(chat_id=target_user_id, video_note=file_id)
+                if caption_with_signature:
+                    await bot.send_message(
+                        target_user_id,
+                        caption_with_signature,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+        except TelegramBadRequest as e:
+            await message.answer(_(
+                "admin_broadcast_invalid_html",
+                default="❌ Некорректный HTML в сообщении. Пожалуйста, отправьте корректный HTML (поддерживаются теги Telegram) или уберите теги.\nОшибка: {error}",
+                error=str(e),
+            ))
+            return
         
         # Confirm to admin
         await message.answer(_(
