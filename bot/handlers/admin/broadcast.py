@@ -123,6 +123,86 @@ async def process_broadcast_message_handler(
         broadcast_target="all",
     )
 
+    # Отправляем превью-копию того, что будет разослано
+    try:
+        if content_type == "text":
+            await bot.send_message(
+                chat_id=message.chat.id,
+                text=text,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+                disable_notification=True,
+            )
+        elif content_type == "photo":
+            await bot.send_photo(
+                chat_id=message.chat.id,
+                photo=file_id,
+                caption=text or None,
+                parse_mode="HTML",
+                disable_notification=True,
+            )
+        elif content_type == "video":
+            await bot.send_video(
+                chat_id=message.chat.id,
+                video=file_id,
+                caption=text or None,
+                parse_mode="HTML",
+                disable_notification=True,
+            )
+        elif content_type == "animation":
+            await bot.send_animation(
+                chat_id=message.chat.id,
+                animation=file_id,
+                caption=text or None,
+                parse_mode="HTML",
+                disable_notification=True,
+            )
+        elif content_type == "document":
+            await bot.send_document(
+                chat_id=message.chat.id,
+                document=file_id,
+                caption=text or None,
+                parse_mode="HTML",
+                disable_notification=True,
+            )
+        elif content_type == "audio":
+            await bot.send_audio(
+                chat_id=message.chat.id,
+                audio=file_id,
+                caption=text or None,
+                parse_mode="HTML",
+                disable_notification=True,
+            )
+        elif content_type == "voice":
+            await bot.send_voice(
+                chat_id=message.chat.id,
+                voice=file_id,
+                caption=text or None,
+                parse_mode="HTML",
+                disable_notification=True,
+            )
+        elif content_type == "sticker":
+            await bot.send_sticker(
+                chat_id=message.chat.id,
+                sticker=file_id,
+                disable_notification=True,
+            )
+        elif content_type == "video_note":
+            await bot.send_video_note(
+                chat_id=message.chat.id,
+                video_note=file_id,
+                disable_notification=True,
+            )
+    except TelegramBadRequest as e:
+        await message.answer(
+            _(
+                "admin_broadcast_invalid_html",
+                default="❌ Некорректный HTML в сообщении. Пожалуйста, отправьте корректный HTML (поддерживаются теги Telegram) или уберите теги.\nОшибка: {error}",
+                error=str(e),
+            )
+        )
+        return
+
     # Показываем короткое подтверждение без дублирования текста — сообщение выше служит превью
     confirmation_prompt = _("admin_broadcast_confirm_prompt_short")
 
