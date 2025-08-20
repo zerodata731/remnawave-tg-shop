@@ -76,47 +76,55 @@ async def process_broadcast_message_handler(
 
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    # Сохраняем в state исходный текст и entities
+    # Определяем тип содержимого и сохраняем данные в state
     text = (message.text or message.caption or "").strip()
     entities = message.entities or message.caption_entities or []
 
-    # Если текст пустой (например, прислали стикер/фото без подписи) — просим ввести текст
-    if not text:
+    content_type = "text"
+    file_id = None
+
+    if message.photo:
+        content_type = "photo"
+        # Берем самое большое фото
+        file_id = message.photo[-1].file_id
+    elif message.video:
+        content_type = "video"
+        file_id = message.video.file_id
+    elif message.animation:
+        content_type = "animation"
+        file_id = message.animation.file_id
+    elif message.document:
+        content_type = "document"
+        file_id = message.document.file_id
+    elif message.audio:
+        content_type = "audio"
+        file_id = message.audio.file_id
+    elif message.voice:
+        content_type = "voice"
+        file_id = message.voice.file_id
+    elif message.sticker:
+        content_type = "sticker"
+        file_id = message.sticker.file_id
+    elif message.video_note:
+        content_type = "video_note"
+        file_id = message.video_note.file_id
+
+    # Если нет ни текста, ни медиа — ошибка
+    if not text and not file_id:
         await message.answer(_("admin_broadcast_error_no_message"))
         return
 
-    # Предварительная проверка HTML: попробуем отправить и сразу удалить
-    # Если HTML некорректный, Telegram вернёт ошибку парсинга
-    try:
-        test_msg = await bot.send_message(
-            chat_id=message.chat.id,
-            text=text,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-            disable_notification=True,
-        )
-        # Удалим тестовое сообщение
-        try:
-            await bot.delete_message(chat_id=message.chat.id, message_id=test_msg.message_id)
-        except Exception:
-            pass
-    except TelegramBadRequest as e:
-        await message.answer(
-            _(
-                "admin_broadcast_invalid_html",
-                default="❌ Некорректный HTML в сообщении. Пожалуйста, отправьте корректный HTML (поддерживаются теги Telegram) или уберите теги.\nОшибка: {error}",
-                error=str(e),
-            )
-        )
-        return
-
+    # Сохраняем данные для рассылки
     await state.update_data(
         broadcast_text=text,
         broadcast_entities=entities,
+        broadcast_content_type=content_type,
+        broadcast_file_id=file_id,
         broadcast_target="all",
     )
 
-    confirmation_prompt = _("admin_broadcast_confirm_prompt", message_preview=text)
+    # Показываем короткое подтверждение без дублирования текста — сообщение выше служит превью
+    confirmation_prompt = _("admin_broadcast_confirm_prompt_short")
 
     await message.answer(
         confirmation_prompt,
@@ -148,10 +156,9 @@ async def change_broadcast_target_handler(
 
     await state.update_data(broadcast_target=new_target)
     user_fsm_data = await state.get_data()
-    text = user_fsm_data.get("broadcast_text", "")
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
     confirmation_prompt = _(
-        "admin_broadcast_confirm_prompt", message_preview=text
+        "admin_broadcast_confirm_prompt_short"
     )
     try:
         await callback.message.edit_text(
@@ -223,8 +230,9 @@ async def confirm_broadcast_callback_handler(
     if action == "send":
         text = user_fsm_data.get("broadcast_text")
         entities = user_fsm_data.get("broadcast_entities", [])
-
-        if not text:
+        content_type = user_fsm_data.get("broadcast_content_type", "text")
+        file_id = user_fsm_data.get("broadcast_file_id")
+        if not text and content_type == "text":
             await callback.message.edit_text(_("admin_broadcast_error_no_message"))
             await state.clear()
             await callback.answer(
@@ -259,12 +267,45 @@ async def confirm_broadcast_callback_handler(
         # Queue all messages for sending
         for uid in user_ids:
             try:
-                await queue_manager.send_message(
-                    chat_id=uid,
-                    text=text,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
+                if content_type == "text":
+                    await queue_manager.send_message(
+                        chat_id=uid,
+                        text=text,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                elif content_type == "photo":
+                    await queue_manager.send_photo(
+                        chat_id=uid, photo=file_id, caption=text or None, parse_mode="HTML"
+                    )
+                elif content_type == "video":
+                    await queue_manager.send_video(
+                        chat_id=uid, video=file_id, caption=text or None, parse_mode="HTML"
+                    )
+                elif content_type == "animation":
+                    await queue_manager.send_animation(
+                        chat_id=uid, animation=file_id, caption=text or None, parse_mode="HTML"
+                    )
+                elif content_type == "document":
+                    await queue_manager.send_document(
+                        chat_id=uid, document=file_id, caption=text or None, parse_mode="HTML"
+                    )
+                elif content_type == "audio":
+                    await queue_manager.send_audio(
+                        chat_id=uid, audio=file_id, caption=text or None, parse_mode="HTML"
+                    )
+                elif content_type == "voice":
+                    await queue_manager.send_voice(
+                        chat_id=uid, voice=file_id, caption=text or None, parse_mode="HTML"
+                    )
+                elif content_type == "sticker":
+                    await queue_manager.send_sticker(
+                        chat_id=uid, sticker=file_id
+                    )
+                elif content_type == "video_note":
+                    await queue_manager.send_video_note(
+                        chat_id=uid, video_note=file_id
+                    )
                 sent_count += 1
                 
                 # Log successful queuing
@@ -275,7 +316,7 @@ async def confirm_broadcast_callback_handler(
                         "telegram_username": admin_user.username,
                         "telegram_first_name": admin_user.first_name,
                         "event_type": "admin_broadcast_queued",
-                        "content": f"To user {uid}: {text[:70]}...",
+                        "content": f"To user {uid}: [{content_type}] {(text or '')[:70]}...",
                         "is_admin_event": True,
                         "target_user_id": uid,
                     },

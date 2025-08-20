@@ -155,6 +155,7 @@
 
   "admin_broadcast_enter_message": "Enter the broadcast message (HTML supported):",
   "admin_broadcast_confirm_prompt": "You are about to send the following message:\n\n{message_preview}\n\nConfirm sending?",
+  "admin_broadcast_confirm_prompt_short": "The message above will be sent. Confirm?",
   "broadcast_target_all_button": "👥 All",
   "broadcast_target_active_button": "✅ Active",
   "broadcast_target_inactive_button": "⌛ Inactive",
