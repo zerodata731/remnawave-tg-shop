@@ -19,6 +19,7 @@ from bot.keyboards.inline.admin_keyboards import (
 )
 from bot.middlewares.i18n import JsonI18n
 from bot.utils.message_queue import get_queue_manager
+from bot.utils import get_message_content, send_message_by_type, send_message_via_queue, MessageContent
 
 router = Router(name="admin_broadcast_router")
 
@@ -77,122 +78,33 @@ async def process_broadcast_message_handler(
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
     # Определяем тип содержимого и сохраняем данные в state
-    text = (message.text or message.caption or "").strip()
     entities = message.entities or message.caption_entities or []
-
-    content_type = "text"
-    file_id = None
-
-    if message.photo:
-        content_type = "photo"
-        # Берем самое большое фото
-        file_id = message.photo[-1].file_id
-    elif message.video:
-        content_type = "video"
-        file_id = message.video.file_id
-    elif message.animation:
-        content_type = "animation"
-        file_id = message.animation.file_id
-    elif message.document:
-        content_type = "document"
-        file_id = message.document.file_id
-    elif message.audio:
-        content_type = "audio"
-        file_id = message.audio.file_id
-    elif message.voice:
-        content_type = "voice"
-        file_id = message.voice.file_id
-    elif message.sticker:
-        content_type = "sticker"
-        file_id = message.sticker.file_id
-    elif message.video_note:
-        content_type = "video_note"
-        file_id = message.video_note.file_id
+    content = get_message_content(message)
 
     # Если нет ни текста, ни медиа — ошибка
-    if not text and not file_id:
+    if not content.text and not content.file_id:
         await message.answer(_("admin_broadcast_error_no_message"))
         return
 
     # Сохраняем данные для рассылки
     await state.update_data(
-        broadcast_text=text,
+        broadcast_text=content.text,
         broadcast_entities=entities,
-        broadcast_content_type=content_type,
-        broadcast_file_id=file_id,
+        broadcast_content_type=content.content_type,
+        broadcast_file_id=content.file_id,
         broadcast_target="all",
     )
 
     # Отправляем превью-копию того, что будет разослано
     try:
-        if content_type == "text":
-            await bot.send_message(
-                chat_id=message.chat.id,
-                text=text,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-                disable_notification=True,
-            )
-        elif content_type == "photo":
-            await bot.send_photo(
-                chat_id=message.chat.id,
-                photo=file_id,
-                caption=text or None,
-                parse_mode="HTML",
-                disable_notification=True,
-            )
-        elif content_type == "video":
-            await bot.send_video(
-                chat_id=message.chat.id,
-                video=file_id,
-                caption=text or None,
-                parse_mode="HTML",
-                disable_notification=True,
-            )
-        elif content_type == "animation":
-            await bot.send_animation(
-                chat_id=message.chat.id,
-                animation=file_id,
-                caption=text or None,
-                parse_mode="HTML",
-                disable_notification=True,
-            )
-        elif content_type == "document":
-            await bot.send_document(
-                chat_id=message.chat.id,
-                document=file_id,
-                caption=text or None,
-                parse_mode="HTML",
-                disable_notification=True,
-            )
-        elif content_type == "audio":
-            await bot.send_audio(
-                chat_id=message.chat.id,
-                audio=file_id,
-                caption=text or None,
-                parse_mode="HTML",
-                disable_notification=True,
-            )
-        elif content_type == "voice":
-            await bot.send_voice(
-                chat_id=message.chat.id,
-                voice=file_id,
-                caption=text or None,
-                parse_mode="HTML",
-                disable_notification=True,
-            )
-        elif content_type == "sticker":
-            await bot.send_sticker(
-                chat_id=message.chat.id,
-                sticker=file_id,
-                disable_notification=True,
-            )
-        elif content_type == "video_note":
-            await bot.send_video_note(
-                chat_id=message.chat.id,
-                video_note=file_id,
-                disable_notification=True,
-            )
+        await send_message_by_type(
+            bot, 
+            chat_id=message.chat.id, 
+            content=content,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            disable_notification=True,
+        )
     except TelegramBadRequest as e:
         await message.answer(
             _(
@@ -308,11 +220,15 @@ async def confirm_broadcast_callback_handler(
     user_fsm_data = await state.get_data()
 
     if action == "send":
-        text = user_fsm_data.get("broadcast_text")
+        # Создаем объект контента из сохраненных данных
+        content = MessageContent(
+            content_type=user_fsm_data.get("broadcast_content_type", "text"),
+            file_id=user_fsm_data.get("broadcast_file_id"),
+            text=user_fsm_data.get("broadcast_text")
+        )
         entities = user_fsm_data.get("broadcast_entities", [])
-        content_type = user_fsm_data.get("broadcast_content_type", "text")
-        file_id = user_fsm_data.get("broadcast_file_id")
-        if not text and content_type == "text":
+        
+        if not content.text and content.content_type == "text":
             await callback.message.edit_text(_("admin_broadcast_error_no_message"))
             await state.clear()
             await callback.answer(
@@ -335,7 +251,7 @@ async def confirm_broadcast_callback_handler(
         failed_count = 0
         admin_user = callback.from_user
         logging.info(
-            f"Admin {admin_user.id} broadcasting '{text[:50]}...' to {len(user_ids)} users."
+            f"Admin {admin_user.id} broadcasting '{(content.text or '')[:50]}...' to {len(user_ids)} users."
         )
 
         # Get message queue manager
@@ -347,45 +263,13 @@ async def confirm_broadcast_callback_handler(
         # Queue all messages for sending
         for uid in user_ids:
             try:
-                if content_type == "text":
-                    await queue_manager.send_message(
-                        chat_id=uid,
-                        text=text,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True,
-                    )
-                elif content_type == "photo":
-                    await queue_manager.send_photo(
-                        chat_id=uid, photo=file_id, caption=text or None, parse_mode="HTML"
-                    )
-                elif content_type == "video":
-                    await queue_manager.send_video(
-                        chat_id=uid, video=file_id, caption=text or None, parse_mode="HTML"
-                    )
-                elif content_type == "animation":
-                    await queue_manager.send_animation(
-                        chat_id=uid, animation=file_id, caption=text or None, parse_mode="HTML"
-                    )
-                elif content_type == "document":
-                    await queue_manager.send_document(
-                        chat_id=uid, document=file_id, caption=text or None, parse_mode="HTML"
-                    )
-                elif content_type == "audio":
-                    await queue_manager.send_audio(
-                        chat_id=uid, audio=file_id, caption=text or None, parse_mode="HTML"
-                    )
-                elif content_type == "voice":
-                    await queue_manager.send_voice(
-                        chat_id=uid, voice=file_id, caption=text or None, parse_mode="HTML"
-                    )
-                elif content_type == "sticker":
-                    await queue_manager.send_sticker(
-                        chat_id=uid, sticker=file_id
-                    )
-                elif content_type == "video_note":
-                    await queue_manager.send_video_note(
-                        chat_id=uid, video_note=file_id
-                    )
+                await send_message_via_queue(
+                    queue_manager, 
+                    uid, 
+                    content,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
                 sent_count += 1
                 
                 # Log successful queuing
@@ -396,7 +280,7 @@ async def confirm_broadcast_callback_handler(
                         "telegram_username": admin_user.username,
                         "telegram_first_name": admin_user.first_name,
                         "event_type": "admin_broadcast_queued",
-                        "content": f"To user {uid}: [{content_type}] {(text or '')[:70]}...",
+                        "content": f"To user {uid}: [{content.content_type}] {(content.text or '')[:70]}...",
                         "is_admin_event": True,
                         "target_user_id": uid,
                     },

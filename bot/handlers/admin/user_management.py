@@ -16,6 +16,7 @@ from bot.keyboards.inline.admin_keyboards import get_back_to_admin_panel_keyboar
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
 from bot.middlewares.i18n import JsonI18n
+from bot.utils import get_message_content, send_direct_message
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 
 router = Router(name="admin_user_management_router")
@@ -615,120 +616,33 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
             await state.clear()
             return
 
-        # Prepare admin signature and content type
+        # Prepare admin signature and get content
         admin_signature = _(
             "admin_direct_message_signature",
             default="\n\n---\n💬 Сообщение от администратора"
         )
+        
+        content = get_message_content(message)
 
-        content_type = "text"
-        file_id = None
-
-        if message.photo:
-            content_type = "photo"
-            file_id = message.photo[-1].file_id
-        elif message.video:
-            content_type = "video"
-            file_id = message.video.file_id
-        elif message.animation:
-            content_type = "animation"
-            file_id = message.animation.file_id
-        elif message.document:
-            content_type = "document"
-            file_id = message.document.file_id
-        elif message.audio:
-            content_type = "audio"
-            file_id = message.audio.file_id
-        elif message.voice:
-            content_type = "voice"
-            file_id = message.voice.file_id
-        elif message.sticker:
-            content_type = "sticker"
-            file_id = message.sticker.file_id
-        elif message.video_note:
-            content_type = "video_note"
-            file_id = message.video_note.file_id
-
-        if not text and not file_id:
+        if not content.text and not content.file_id:
             await message.answer(_(
                 "admin_direct_empty_message",
                 default="❌ Пустое сообщение. Отправьте текст или медиа."
             ))
             return
 
-        caption_with_signature = (text + admin_signature) if text else None
+        caption_with_signature = (content.text + admin_signature) if content.text else None
 
-        # Send to target user similar to broadcast
+        # Send to target user using our fancy match/case function
         try:
-            if content_type == "text":
-                await bot.send_message(
-                    target_user_id,
-                    (caption_with_signature or admin_signature),
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
-            elif content_type == "photo":
-                await bot.send_photo(
-                    chat_id=target_user_id,
-                    photo=file_id,
-                    caption=caption_with_signature,
-                    parse_mode="HTML",
-                )
-            elif content_type == "video":
-                await bot.send_video(
-                    chat_id=target_user_id,
-                    video=file_id,
-                    caption=caption_with_signature,
-                    parse_mode="HTML",
-                )
-            elif content_type == "animation":
-                await bot.send_animation(
-                    chat_id=target_user_id,
-                    animation=file_id,
-                    caption=caption_with_signature,
-                    parse_mode="HTML",
-                )
-            elif content_type == "document":
-                await bot.send_document(
-                    chat_id=target_user_id,
-                    document=file_id,
-                    caption=caption_with_signature,
-                    parse_mode="HTML",
-                )
-            elif content_type == "audio":
-                await bot.send_audio(
-                    chat_id=target_user_id,
-                    audio=file_id,
-                    caption=caption_with_signature,
-                    parse_mode="HTML",
-                )
-            elif content_type == "voice":
-                await bot.send_voice(
-                    chat_id=target_user_id,
-                    voice=file_id,
-                    caption=caption_with_signature,
-                    parse_mode="HTML",
-                )
-            elif content_type == "sticker":
-                # Stickers do not support captions; send sticker and then optional signature/text
-                await bot.send_sticker(chat_id=target_user_id, sticker=file_id)
-                if caption_with_signature:
-                    await bot.send_message(
-                        target_user_id,
-                        caption_with_signature,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True,
-                    )
-            elif content_type == "video_note":
-                # Video notes do not support captions; send media then optional signature/text
-                await bot.send_video_note(chat_id=target_user_id, video_note=file_id)
-                if caption_with_signature:
-                    await bot.send_message(
-                        target_user_id,
-                        caption_with_signature,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True,
-                    )
+            await send_direct_message(
+                bot,
+                target_user_id, 
+                content,
+                extra_text=admin_signature,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
         except TelegramBadRequest as e:
             await message.answer(_(
                 "admin_broadcast_invalid_html",
