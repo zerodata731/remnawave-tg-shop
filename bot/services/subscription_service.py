@@ -6,6 +6,7 @@ from aiogram import Bot
 from bot.middlewares.i18n import JsonI18n
 
 from db.dal import user_dal, subscription_dal, promo_code_dal, payment_dal
+from bot.utils.date_utils import add_months
 from db.models import User, Subscription
 
 from config.settings import Settings
@@ -232,23 +233,10 @@ class SubscriptionService:
                     "panel_user_uuid": actual_panel_uuid_from_api
                 }
 
-                if (
-                    actual_panel_username_from_api
-                    and actual_panel_username_from_api
-                    != panel_username_on_panel_standard
-                    and (
-                        db_user.username is None
-                        or db_user.username != actual_panel_username_from_api
-                    )
-                ):
-                    update_data_for_local_user["username"] = (
-                        actual_panel_username_from_api
-                    )
-
+                # Do not overwrite Telegram username with panel username.
+                # Only update the local linkage to panel UUID here.
                 await user_dal.update_user(session, user_id, update_data_for_local_user)
                 db_user.panel_user_uuid = actual_panel_uuid_from_api
-                if "username" in update_data_for_local_user:
-                    db_user.username = update_data_for_local_user["username"]
                 panel_user_created_or_linked_now = True
                 current_local_panel_uuid = actual_panel_uuid_from_api
         else:
@@ -437,7 +425,9 @@ class SubscriptionService:
         ):
             start_date = current_active_sub.end_date
 
-        duration_days_total = months * 30
+        # base duration by months
+        end_after_months = add_months(start_date, months)
+        duration_days_total = (end_after_months - start_date).days
         applied_promo_bonus_days = 0
 
         if promo_code_id_from_payment:

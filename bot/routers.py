@@ -1,4 +1,4 @@
-from aiogram import Router
+from aiogram import Router, F
 
 from bot.handlers.user import user_router_aggregate
 from bot.handlers import inline_mode
@@ -9,6 +9,10 @@ from config.settings import Settings
 
 def build_root_router(settings: Settings) -> Router:
     root = Router(name="root")
+
+    # Allow all updates only in private chats (messages, callback queries, etc.)
+    root.message.filter(F.chat.type == "private")
+    root.callback_query.filter(F.message.chat.type == "private")
 
     # Public routers
     root.include_router(user_router_aggregate)

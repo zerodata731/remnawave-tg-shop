@@ -165,24 +165,25 @@ async def start_command_handler(message: types.Message,
             "registration_date": datetime.now(timezone.utc)
         }
         try:
-            db_user = await user_dal.create_user(session, user_data_to_create)
+            db_user, created = await user_dal.create_user(session, user_data_to_create)
 
-            logging.info(
-                f"New user {user_id} added to session. Referred by: {referred_by_user_id or 'N/A'}."
-            )
-            
-            # Send notification about new user registration
-            try:
-                from bot.services.notification_service import NotificationService
-                notification_service = NotificationService(message.bot, settings, i18n)
-                await notification_service.notify_new_user_registration(
-                    user_id=user_id,
-                    username=user.username,
-                    first_name=user.first_name,
-                    referred_by_id=referred_by_user_id
+            if created:
+                logging.info(
+                    f"New user {user_id} added to session. Referred by: {referred_by_user_id or 'N/A'}."
                 )
-            except Exception as e:
-                logging.error(f"Failed to send new user notification: {e}")
+
+                # Send notification about new user registration
+                try:
+                    from bot.services.notification_service import NotificationService
+                    notification_service = NotificationService(message.bot, settings, i18n)
+                    await notification_service.notify_new_user_registration(
+                        user_id=user_id,
+                        username=user.username,
+                        first_name=user.first_name,
+                        referred_by_id=referred_by_user_id
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to send new user notification: {e}")
         except Exception as e_create:
 
             logging.error(

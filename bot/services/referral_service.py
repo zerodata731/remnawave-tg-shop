@@ -50,7 +50,9 @@ class ReferralService:
 
             # If configured to apply referral bonuses only once per invited user,
             # check if the referee already has succeeded payments.
-            if self.settings.REFERRAL_ONE_BONUS_PER_REFEREE:
+            # Use getattr with a safe default (True) to avoid AttributeError if
+            # running with an older settings schema.
+            if getattr(self.settings, "REFERRAL_ONE_BONUS_PER_REFEREE", True):
                 try:
                     succeeded_count = await payment_dal.count_user_succeeded_payments(
                         session, referee_user_id, exclude_payment_id=current_payment_db_id

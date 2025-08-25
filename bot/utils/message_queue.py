@@ -151,6 +151,76 @@ class MessageQueueManager:
         )
         await queue.add_message(message)
     
+    async def send_photo(self, chat_id: int, **kwargs) -> None:
+        """Queue a send_photo call"""
+        queue = self.group_queue if self._is_group_chat(chat_id) else self.user_queue
+        message = QueuedMessage(
+            chat_id=chat_id,
+            method_name='send_photo',
+            kwargs=kwargs
+        )
+        await queue.add_message(message)
+
+    async def send_video(self, chat_id: int, **kwargs) -> None:
+        """Queue a send_video call"""
+        queue = self.group_queue if self._is_group_chat(chat_id) else self.user_queue
+        message = QueuedMessage(
+            chat_id=chat_id,
+            method_name='send_video',
+            kwargs=kwargs
+        )
+        await queue.add_message(message)
+
+    async def send_animation(self, chat_id: int, **kwargs) -> None:
+        """Queue a send_animation (GIF) call"""
+        queue = self.group_queue if self._is_group_chat(chat_id) else self.user_queue
+        message = QueuedMessage(
+            chat_id=chat_id,
+            method_name='send_animation',
+            kwargs=kwargs
+        )
+        await queue.add_message(message)
+
+    async def send_audio(self, chat_id: int, **kwargs) -> None:
+        """Queue a send_audio call"""
+        queue = self.group_queue if self._is_group_chat(chat_id) else self.user_queue
+        message = QueuedMessage(
+            chat_id=chat_id,
+            method_name='send_audio',
+            kwargs=kwargs
+        )
+        await queue.add_message(message)
+
+    async def send_voice(self, chat_id: int, **kwargs) -> None:
+        """Queue a send_voice call"""
+        queue = self.group_queue if self._is_group_chat(chat_id) else self.user_queue
+        message = QueuedMessage(
+            chat_id=chat_id,
+            method_name='send_voice',
+            kwargs=kwargs
+        )
+        await queue.add_message(message)
+
+    async def send_sticker(self, chat_id: int, **kwargs) -> None:
+        """Queue a send_sticker call"""
+        queue = self.group_queue if self._is_group_chat(chat_id) else self.user_queue
+        message = QueuedMessage(
+            chat_id=chat_id,
+            method_name='send_sticker',
+            kwargs=kwargs
+        )
+        await queue.add_message(message)
+
+    async def send_video_note(self, chat_id: int, **kwargs) -> None:
+        """Queue a send_video_note call"""
+        queue = self.group_queue if self._is_group_chat(chat_id) else self.user_queue
+        message = QueuedMessage(
+            chat_id=chat_id,
+            method_name='send_video_note',
+            kwargs=kwargs
+        )
+        await queue.add_message(message)
+    
     async def answer_callback_query(self, callback_query_id: str, **kwargs) -> None:
         """Send callback query answer immediately (not rate limited)"""
         await self.bot.answer_callback_query(callback_query_id, **kwargs)

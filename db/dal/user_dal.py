@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import update, delete, func, and_
-from datetime import datetime
+from datetime import datetime, timezone
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..models import User, Subscription
 
@@ -33,19 +34,41 @@ async def get_user_by_panel_uuid(
 ## Removed unused generic get_user helper to keep DAL explicit and simple
 
 
-async def create_user(session: AsyncSession, user_data: Dict[str, Any]) -> User:
+async def create_user(session: AsyncSession, user_data: Dict[str, Any]) -> Tuple[User, bool]:
+    """Create a user if not exists in a race-safe way.
+
+    Returns a tuple of (user, created_flag).
+    """
 
     if "registration_date" not in user_data:
-        user_data["registration_date"] = datetime.now()
+        user_data["registration_date"] = datetime.now(timezone.utc)
 
-    new_user = User(**user_data)
-    session.add(new_user)
-    await session.flush()
-    await session.refresh(new_user)
-    logging.info(
-        f"New user {new_user.user_id} created in DAL. Referred by: {new_user.referred_by_id or 'N/A'}."
+    # Use PostgreSQL upsert to avoid IntegrityError on concurrent inserts
+    stmt = (
+        pg_insert(User)
+        .values(**user_data)
+        .on_conflict_do_nothing(index_elements=[User.user_id])
+        .returning(User.user_id)
     )
-    return new_user
+
+    result = await session.execute(stmt)
+    inserted_row = result.first()
+    created = inserted_row is not None
+
+    # Fetch the user (inserted just now or pre-existing)
+    user_id: int = user_data["user_id"]
+    user = await get_user_by_id(session, user_id)
+
+    if created and user is not None:
+        logging.info(
+            f"New user {user.user_id} created in DAL. Referred by: {user.referred_by_id or 'N/A'}."
+        )
+    elif user is not None:
+        logging.info(
+            f"User {user.user_id} already exists in DAL. Proceeding without creation."
+        )
+
+    return user, created
 
 
 async def update_user(

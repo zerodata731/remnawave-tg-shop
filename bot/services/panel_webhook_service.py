@@ -11,6 +11,7 @@ from config.settings import Settings
 from bot.middlewares.i18n import JsonI18n
 from bot.keyboards.inline.user_keyboards import get_subscribe_only_markup
 from db.dal import user_dal
+from bot.utils.date_utils import add_months
 
 EVENT_MAP = {
     "user.expires_in_72_hours": (3, "subscription_72h_notification"),
@@ -48,7 +49,7 @@ class PanelWebhookService:
         Returns True if an auto-renewal was performed (and renewal message sent), False otherwise.
         """
         from db.dal import subscription_dal, payment_dal
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timezone
         
         try:
             auto_renewed = False
@@ -68,8 +69,8 @@ class PanelWebhookService:
                     # This user has tribute payments, auto-renew for the same duration
                     logging.info(f"Auto-renewing tribute subscription for user {user_id} for {last_tribute_duration} months")
                     
-                    # Extend subscription by the last payment duration
-                    new_end_date = datetime.now(timezone.utc) + timedelta(days=last_tribute_duration * 30)
+                    # Extend subscription by the last payment duration (calendar months)
+                    new_end_date = add_months(datetime.now(timezone.utc), last_tribute_duration)
                     
                     await subscription_dal.update_subscription(
                         session,
