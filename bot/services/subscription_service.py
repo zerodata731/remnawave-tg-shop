@@ -6,6 +6,7 @@ from aiogram import Bot
 from bot.middlewares.i18n import JsonI18n
 
 from db.dal import user_dal, subscription_dal, promo_code_dal, payment_dal
+from bot.utils.date_utils import add_months
 from db.models import User, Subscription
 
 from config.settings import Settings
@@ -424,7 +425,9 @@ class SubscriptionService:
         ):
             start_date = current_active_sub.end_date
 
-        duration_days_total = months * 30
+        # base duration by months
+        end_after_months = add_months(start_date, months)
+        duration_days_total = (end_after_months - start_date).days
         applied_promo_bonus_days = 0
 
         if promo_code_id_from_payment:
