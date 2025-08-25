@@ -107,10 +107,10 @@ async def on_startup_configured(dispatcher: Dispatcher):
                 "STARTUP: Skipped setting Telegram webhook due to security or configuration error."
             )
     else:
-        logging.info(
-            "STARTUP: WEBHOOK_BASE_URL not set in environment. Running in polling mode and clearing any existing webhook."
+        logging.error(
+            "STARTUP: WEBHOOK_BASE_URL not set in environment. Webhook mode is required. Exiting."
         )
-        await bot.delete_webhook(drop_pending_updates=True)
+        raise SystemExit("WEBHOOK_BASE_URL is required. Polling mode is disabled.")
 
     if settings.SUBSCRIPTION_MINI_APP_URL:
         try:
@@ -271,54 +271,30 @@ async def run_bot(settings_param: Settings):
     await register_all_routers(dp, settings_param)
 
     tg_webhook_base = settings_param.WEBHOOK_BASE_URL
-    yk_webhook_base = settings_param.WEBHOOK_BASE_URL
 
-    should_run_aiohttp_server = bool(tg_webhook_base) or (
-        bool(yk_webhook_base) and bool(settings_param.yookassa_webhook_path)
-    )
-
-    telegram_uses_webhook_mode = bool(tg_webhook_base)
-    run_telegram_polling = not telegram_uses_webhook_mode
+    # Webhook mode is now required - exit if not configured
+    if not tg_webhook_base:
+        logging.error("WEBHOOK_BASE_URL is required. Polling mode is disabled. Exiting.")
+        await dp.emit_shutdown()
+        raise SystemExit("WEBHOOK_BASE_URL is required. Polling mode is disabled.")
 
     logging.info(f"--- Bot Run Mode Decision ---")
-    logging.info(
-        f"Configured WEBHOOK_BASE_URL: '{tg_webhook_base}' -> Telegram Webhook Mode: {telegram_uses_webhook_mode}"
-    )
-    logging.info(
-        f"YooKassa webhook path: '{settings_param.yookassa_webhook_path}'"
-    )
-    logging.info(f"Decision: Run AIOHTTP server: {should_run_aiohttp_server}")
-    logging.info(f"Decision: Run Telegram Polling: {run_telegram_polling}")
+    logging.info(f"Configured WEBHOOK_BASE_URL: '{tg_webhook_base}' -> Webhook Mode: ENABLED")
+    logging.info(f"YooKassa webhook path: '{settings_param.yookassa_webhook_path}'")
+    logging.info(f"Decision: Run AIOHTTP server: ENABLED (required for webhooks)")
     logging.info(f"--- End Bot Run Mode Decision ---")
 
     web_app_runner = None
     main_tasks = []
 
-    if should_run_aiohttp_server:
-        async def web_server_task():
-            await build_and_start_web_app(dp, bot, settings_param, local_async_session_factory)
+    # Only run AIOHTTP server for webhook mode
+    async def web_server_task():
+        await build_and_start_web_app(dp, bot, settings_param, local_async_session_factory)
 
-        main_tasks.append(asyncio.create_task(web_server_task(), name="AIOHTTPServerTask"))
+    main_tasks.append(asyncio.create_task(web_server_task(), name="AIOHTTPServerTask"))
 
-    if run_telegram_polling:
-        logging.info("Starting bot in Telegram Polling mode...")
-        main_tasks.append(
-            asyncio.create_task(
-                dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types()),
-                name="TelegramPollingTask",
-            )
-        )
-
-    if not main_tasks:
-        logging.error(
-            "Bot is not configured for any run mode (neither Webhook nor Polling). Exiting."
-        )
-        await dp.emit_shutdown()
-        return
-
-    logging.info(
-        f"Starting bot with main tasks: {[task.get_name() for task in main_tasks]}"
-    )
+    logging.info("Starting bot in Webhook mode with AIOHTTP server...")
+    logging.info(f"Starting bot with main tasks: {[task.get_name() for task in main_tasks]}")
 
     try:
         await asyncio.gather(*main_tasks)
