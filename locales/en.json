@@ -518,5 +518,10 @@
   "admin_financial_week_label": "This week",
   "admin_financial_month_label": "This month",
   "admin_financial_all_time_label": "All time",
-  "admin_financial_payments_label": "payments"
+  "admin_financial_payments_label": "payments",
+
+  "admin_sync_details": "📊 Synchronization Statistics:\n🔍 Panel records checked: {panel_records_checked}\n👥 Users found in DB: {users_found_in_db}\n✨ New users created: {users_created}\n🔄 Users updated: {users_updated}\n📋 Subscriptions synced: {subscriptions_synced_count}\n   ├── Created new: {subscriptions_created}\n   └── Updated existing: {subscriptions_updated}{additional_stats}",
+  "admin_sync_no_telegram_id": "\n⚠️ Records without telegramId: {count}",
+  "admin_sync_not_found_in_db": "\n❌ Not found in DB: {count}",
+  "admin_sync_errors": "\n🚫 Errors: {count}"
 }

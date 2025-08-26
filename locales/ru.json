@@ -526,5 +526,10 @@
   "admin_financial_week_label": "За неделю",
   "admin_financial_month_label": "За месяц",
   "admin_financial_all_time_label": "За все время",
-  "admin_financial_payments_label": "платежей"
+  "admin_financial_payments_label": "платежей",
+
+  "admin_sync_details": "📊 Статистика синхронизации:\n🔍 Проверено записей панели: {panel_records_checked}\n👥 Найдено пользователей в БД: {users_found_in_db}\n✨ Создано новых пользователей: {users_created}\n🔄 Пользователей обновлено: {users_updated}\n📋 Подписок синхронизировано: {subscriptions_synced_count}\n   ├── Создано новых: {subscriptions_created}\n   └── Обновлено существующих: {subscriptions_updated}{additional_stats}",
+  "admin_sync_no_telegram_id": "\n⚠️ Записей без telegramId: {count}",
+  "admin_sync_not_found_in_db": "\n❌ Не найдено в БД: {count}",
+  "admin_sync_errors": "\n🚫 Ошибок: {count}"
 }
