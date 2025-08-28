@@ -1,4 +1,5 @@
 {
+  "welcome": "Welcome, {user_name}!",
   "main_menu_greeting": "Hi, {user_name}! 👋\nWhat would you like to do?",
 
   "menu_activate_trial_button": "🆓 Free Trial",
