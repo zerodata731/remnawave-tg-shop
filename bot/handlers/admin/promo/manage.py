@@ -248,6 +248,7 @@ async def promo_export_activations_handler(callback: types.CallbackQuery, i18n_d
     if not i18n or not callback.message or not current_lang:
         return await callback.answer("Error processing request.", show_alert=True)
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+    export_lang = "en"
 
     try:
         promo_id = int(callback.data.split(":")[1])
@@ -267,7 +268,11 @@ async def promo_export_activations_handler(callback: types.CallbackQuery, i18n_d
         
         output.seek(0)
         file = types.BufferedInputFile(output.getvalue().encode('utf-8'), filename=f"promo_{promo.code}_activations.csv")
-        await callback.message.answer_document(file, caption=_("admin_promo_export_caption", code=promo.code))
+        # Force English caption for exports
+        await callback.message.answer_document(
+            file,
+            caption=i18n.gettext(export_lang, "admin_promo_export_caption", code=promo.code)
+        )
 
     except (ValueError, IndexError):
         await callback.answer(_("admin_promo_not_found"), show_alert=True)
@@ -281,9 +286,10 @@ async def promo_export_all_handler(callback: types.CallbackQuery, i18n_data: dic
     if not i18n or not callback.message or not current_lang:
         return await callback.answer("Error processing request.", show_alert=True)
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
+    export_lang = "en"
 
     try:
-        await callback.answer("📄 Создаю CSV файл...", show_alert=True)
+        await callback.answer(i18n.gettext(export_lang, "admin_promo_export_all_generating"), show_alert=True)
         
         # Получаем все промокоды
         all_promos = await promo_code_dal.get_all_promo_codes_with_details(session, limit=10000, offset=0)
@@ -291,15 +297,22 @@ async def promo_export_all_handler(callback: types.CallbackQuery, i18n_data: dic
         output = io.StringIO()
         writer = csv.writer(output)
         
-        # Заголовки CSV
+        # CSV headers (forced to English)
         writer.writerow([
-            "Код", "Бонусные дни", "Максимальные активации", "Текущие активации", 
-            "Статус", "Активен", "Действителен до", "Создан", "Создал (Admin ID)"
+            i18n.gettext(export_lang, "admin_promo_csv_code"),
+            i18n.gettext(export_lang, "admin_promo_csv_bonus_days"),
+            i18n.gettext(export_lang, "admin_promo_csv_max_activations"),
+            i18n.gettext(export_lang, "admin_promo_csv_current_activations"),
+            i18n.gettext(export_lang, "admin_promo_csv_status"),
+            i18n.gettext(export_lang, "admin_promo_csv_is_active"),
+            i18n.gettext(export_lang, "admin_promo_csv_valid_until"),
+            i18n.gettext(export_lang, "admin_promo_csv_created_at"),
+            i18n.gettext(export_lang, "admin_promo_csv_created_by_admin_id"),
         ])
         
         for promo in all_promos:
             # Определяем статус
-            status_emoji, status_text = get_promo_status_emoji_and_text(promo, i18n, current_lang)
+            status_emoji, status_text = get_promo_status_emoji_and_text(promo, i18n, export_lang)
             
             # Формируем данные для CSV
             row = [
@@ -308,8 +321,8 @@ async def promo_export_all_handler(callback: types.CallbackQuery, i18n_data: dic
                 promo.max_activations,
                 promo.current_activations,
                 status_text,
-                "Да" if promo.is_active else "Нет",
-                promo.valid_until.strftime("%Y-%m-%d %H:%M:%S") if promo.valid_until else "Без ограничений",
+                i18n.gettext(export_lang, "csv_yes") if promo.is_active else i18n.gettext(export_lang, "csv_no"),
+                promo.valid_until.strftime("%Y-%m-%d %H:%M:%S") if promo.valid_until else i18n.gettext(export_lang, "admin_promo_valid_indefinitely"),
                 promo.created_at.strftime("%Y-%m-%d %H:%M:%S") if promo.created_at else "N/A",
                 promo.created_by_admin_id or "N/A"
             ]
@@ -324,11 +337,11 @@ async def promo_export_all_handler(callback: types.CallbackQuery, i18n_data: dic
             filename=filename
         )
         
-        caption = f"📄 Экспорт всех промокодов\n📊 Всего: {len(all_promos)} промокодов"
+        caption = i18n.gettext(export_lang, "admin_promo_export_all_caption", count=len(all_promos))
         await callback.message.answer_document(file, caption=caption)
         
     except Exception as e:
-        await callback.answer(f"❌ Ошибка экспорта: {str(e)}", show_alert=True)
+        await callback.answer(f"❌ Export error: {str(e)}", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("promo_delete:"))
