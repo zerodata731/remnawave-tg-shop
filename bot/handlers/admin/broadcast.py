@@ -97,14 +97,27 @@ async def process_broadcast_message_handler(
 
     # Отправляем превью-копию того, что будет разослано
     try:
-        await send_message_by_type(
-            bot, 
-            chat_id=message.chat.id, 
-            content=content,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-            disable_notification=True,
-        )
+        # Для медиа-сообщений используем caption_entities, для текста - entities
+        if content.content_type == "text":
+            await send_message_by_type(
+                bot, 
+                chat_id=message.chat.id, 
+                content=content,
+                parse_mode="HTML",
+                entities=entities,
+                disable_web_page_preview=True,
+                disable_notification=True,
+            )
+        else:
+            await send_message_by_type(
+                bot, 
+                chat_id=message.chat.id, 
+                content=content,
+                parse_mode="HTML",
+                caption_entities=entities,
+                disable_web_page_preview=True,
+                disable_notification=True,
+            )
     except TelegramBadRequest as e:
         await message.answer(
             _(
@@ -263,13 +276,25 @@ async def confirm_broadcast_callback_handler(
         # Queue all messages for sending
         for uid in user_ids:
             try:
-                await send_message_via_queue(
-                    queue_manager, 
-                    uid, 
-                    content,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
+                # Для медиа-сообщений используем caption_entities, для текста - entities
+                if content.content_type == "text":
+                    await send_message_via_queue(
+                        queue_manager, 
+                        uid, 
+                        content,
+                        parse_mode="HTML",
+                        entities=entities,
+                        disable_web_page_preview=True,
+                    )
+                else:
+                    await send_message_via_queue(
+                        queue_manager, 
+                        uid, 
+                        content,
+                        parse_mode="HTML",
+                        caption_entities=entities,
+                        disable_web_page_preview=True,
+                    )
                 sent_count += 1
                 
                 # Log successful queuing

@@ -126,7 +126,7 @@ async def promo_management_handler(callback: types.CallbackQuery, i18n_data: dic
             builder.row(*pagination_buttons)
     
     # Добавляем кнопки экспорта и возврата
-    builder.row(InlineKeyboardButton(text="📄 Экспорт CSV", callback_data="promo_export_all"))
+    builder.row(InlineKeyboardButton(text=_("admin_promo_export_csv_button"), callback_data="promo_export_all"))
     builder.row(InlineKeyboardButton(text=_("back_to_admin_panel_button"), callback_data="admin_action:main"))
     
     # Формируем заголовок с информацией о страницах
