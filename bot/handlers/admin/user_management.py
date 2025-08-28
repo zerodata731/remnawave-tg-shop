@@ -420,7 +420,9 @@ async def handle_view_user_logs(callback: types.CallbackQuery, user: User,
             ), show_alert=True)
             return
         
-        logs_text_parts = [f"📜 <b>Последние действия пользователя {user.user_id}:</b>\n"]
+        logs_text_parts = [
+            f"{_('admin_user_recent_actions_title', default='📜 Последние действия пользователя {user_id}:', user_id=user.user_id)}\n"
+        ]
         
         for log in logs:
             timestamp = log.timestamp.strftime('%Y-%m-%d %H:%M') if log.timestamp else 'N/A'

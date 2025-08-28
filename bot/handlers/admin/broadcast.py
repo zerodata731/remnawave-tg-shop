@@ -337,15 +337,24 @@ async def confirm_broadcast_callback_handler(
         # Get queue stats for detailed report
         queue_stats = queue_manager.get_queue_stats()
         
-        result_message = f"""🚀 Рассылка поставлена в очередь!
-📤 В очередь добавлено: {sent_count}
-❌ Ошибок: {failed_count}
-
-📊 Статус очередей:
-👥 Очередь пользователей: {queue_stats['user_queue_size']} сообщений
-📢 Очередь групп: {queue_stats['group_queue_size']} сообщений
-
-ℹ️ Сообщения будут отправлены автоматически с соблюдением лимитов Telegram."""
+        result_message = (
+            _(
+                "broadcast_queue_result",
+                default=(
+                    "🚀 Рассылка поставлена в очередь!\n"
+                    "📤 В очередь добавлено: {sent_count}\n"
+                    "❌ Ошибок: {failed_count}\n\n"
+                    "📊 Статус очередей:\n"
+                    "👥 Очередь пользователей: {user_queue_size} сообщений\n"
+                    "📢 Очередь групп: {group_queue_size} сообщений\n\n"
+                    "ℹ️ Сообщения будут отправлены автоматически с соблюдением лимитов Telegram."
+                ),
+                sent_count=sent_count,
+                failed_count=failed_count,
+                user_queue_size=queue_stats["user_queue_size"],
+                group_queue_size=queue_stats["group_queue_size"],
+            )
+        )
         await callback.message.answer(
             result_message,
             reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),
