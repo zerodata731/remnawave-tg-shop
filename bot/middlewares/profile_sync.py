@@ -36,6 +36,24 @@ class ProfileSyncMiddleware(BaseMiddleware):
                         logging.info(
                             f"ProfileSyncMiddleware: Updated user {tg_user.id} profile fields: {list(update_payload.keys())}"
                         )
+
+                        # Also update description on panel if linked
+                        try:
+                            panel_service = data.get("panel_service")
+                            if panel_service and db_user.panel_user_uuid:
+                                description_text = "\n".join([
+                                    tg_user.username or "",
+                                    tg_user.first_name or "",
+                                    tg_user.last_name or "",
+                                ])
+                                await panel_service.update_user_details_on_panel(
+                                    db_user.panel_user_uuid,
+                                    {"description": description_text},
+                                )
+                        except Exception as e_upd_desc:
+                            logging.warning(
+                                f"ProfileSyncMiddleware: Failed to update panel description for user {tg_user.id}: {e_upd_desc}"
+                            )
             except Exception as e:
                 logging.error(
                     f"ProfileSyncMiddleware: Failed to sync profile for user {getattr(tg_user, 'id', 'N/A')}: {e}",
