@@ -18,6 +18,7 @@
   "language_set_alert": "Language changed!",
 
   "error_occurred_try_again": "An error occurred, please try again.",
+  "error_try_again": "Please try again.",
   "error_displaying_menu": "Error displaying menu.",
   "main_menu_unknown_action": "Unknown action.",
 
@@ -368,5 +369,16 @@
   "admin_sync_details": "📊 Synchronization Statistics:\n🔍 Panel records checked: {panel_records_checked}\n👥 Users found in DB: {users_found_in_db}\n✨ New users created: {users_created}\n🔄 Users updated: {users_updated}\n📋 Subscriptions synced: {subscriptions_synced_count}\n   ├── Created new: {subscriptions_created}\n   └── Updated existing: {subscriptions_updated}{additional_stats}",
   "admin_sync_no_telegram_id": "\n⚠️ Records without telegramId: {count}",
   "admin_sync_not_found_in_db": "\n❌ Not found in DB: {count}",
-  "admin_payments_pagination_info": "📊 Showing {shown} of {total} payments (page {current_page}/{total_pages})"
+  "admin_payments_pagination_info": "📊 Showing {shown} of {total} payments (page {current_page}/{total_pages})",
+  "my_subscription_details": "🔐 <b>My Subscription</b>\n\n⏰ Status: <b>{status}</b>\n📅 Active until: <b>{end_date}</b>\n📆 Days left: <b>{days_left}</b>\n\n🔗 Configuration link:\n<code>{config_link}</code>\n\n📊 Traffic:\nLimit: <b>{traffic_limit}</b>\nUsed: <b>{traffic_used}</b>",
+  "subscription_not_active": "You don't have an active subscription.",
+  "error_service_unavailable": "Service unavailable. Please try again later.",
+  "error_payment_gateway": "Payment service error. Please try again later.",
+  "traffic_na": "N/A",
+  "payment_service_unavailable": "Payment service is unavailable.",
+  "payment_service_unavailable_alert": "Payment service is unavailable. Please try again later.",
+  "error_creating_payment_record": "Error creating payment record. Please try again later.",
+  "error_payment_gateway_link_failed": "Error creating payment link. Please try again later.",
+  "status_active": "Active",
+  "status_inactive": "Inactive"
 }
