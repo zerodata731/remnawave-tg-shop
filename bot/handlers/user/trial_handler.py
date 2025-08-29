@@ -31,7 +31,10 @@ async def request_trial_confirmation_handler(
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     if not i18n or not callback.message:
-        await callback.answer(_("error_occurred_try_again"), show_alert=True)
+        try:
+            await callback.answer(_("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     show_trial_btn_in_menu_if_fail = False
@@ -46,7 +49,10 @@ async def request_trial_confirmation_handler(
                 current_lang, i18n, settings, False
             ),
         )
-        await callback.answer()
+        try:
+            await callback.answer()
+        except Exception:
+            pass
         return
 
     if await subscription_service.has_had_any_subscription(session, user_id):
@@ -56,7 +62,10 @@ async def request_trial_confirmation_handler(
                 current_lang, i18n, settings, False
             ),
         )
-        await callback.answer()
+        try:
+            await callback.answer()
+        except Exception:
+            pass
         return
 
     # Directly activate trial without confirmation
@@ -68,7 +77,10 @@ async def request_trial_confirmation_handler(
     show_trial_button_after_action = False
 
     if activation_result and activation_result.get("activated"):
-        await callback.answer(_("trial_activated_alert"), show_alert=True)
+        try:
+            await callback.answer(_("trial_activated_alert"), show_alert=True)
+        except Exception:
+            pass
 
         end_date_obj = activation_result.get("end_date")
         config_link_for_trial = activation_result.get("subscription_url") or _(
@@ -106,7 +118,10 @@ async def request_trial_confirmation_handler(
             else "trial_activation_failed"
         )
         final_message_text_in_chat = _(message_key_from_service)
-        await callback.answer(final_message_text_in_chat, show_alert=True)
+        try:
+            await callback.answer(final_message_text_in_chat, show_alert=True)
+        except Exception:
+            pass
         if (
             settings.TRIAL_ENABLED
             and not await subscription_service.has_had_any_subscription(
@@ -129,12 +144,8 @@ async def request_trial_confirmation_handler(
             f"Could not edit trial result message: {e_edit}. Sending new one."
         )
 
-        if (
-            callback.message
-            and hasattr(callback.message, "chat")
-            and callback.message.chat
-        ):
-            await callback.message.chat.send_message(
+        if callback.message:
+            await callback.message.answer(
                 final_message_text_in_chat,
                 parse_mode="HTML",
                 reply_markup=get_main_menu_inline_keyboard(
@@ -160,20 +171,29 @@ async def confirm_activate_trial_handler(
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     if not i18n or not callback.message:
-        await callback.answer(_("error_occurred_try_again"), show_alert=True)
+        try:
+            await callback.answer(_("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     if not settings.TRIAL_ENABLED:
-        await callback.answer(_("trial_feature_disabled"), show_alert=True)
+        try:
+            await callback.answer(_("trial_feature_disabled"), show_alert=True)
+        except Exception:
+            pass
 
         await send_main_menu(
             callback, settings, i18n_data, subscription_service, session, is_edit=True
         )
         return
     if await subscription_service.has_had_any_subscription(session, user_id):
-        await callback.answer(
-            _("trial_already_had_subscription_or_trial"), show_alert=True
-        )
+        try:
+            await callback.answer(
+                _("trial_already_had_subscription_or_trial"), show_alert=True
+            )
+        except Exception:
+            pass
         await send_main_menu(
             callback, settings, i18n_data, subscription_service, session, is_edit=True
         )
@@ -187,7 +207,10 @@ async def confirm_activate_trial_handler(
     show_trial_button_after_action = False
 
     if activation_result and activation_result.get("activated"):
-        await callback.answer(_("trial_activated_alert"), show_alert=True)
+        try:
+            await callback.answer(_("trial_activated_alert"), show_alert=True)
+        except Exception:
+            pass
 
         end_date_obj = activation_result.get("end_date")
         config_link_for_trial = activation_result.get("subscription_url") or _(
@@ -221,7 +244,10 @@ async def confirm_activate_trial_handler(
             else "trial_activation_failed"
         )
         final_message_text_in_chat = _(message_key_from_service)
-        await callback.answer(final_message_text_in_chat, show_alert=True)
+        try:
+            await callback.answer(final_message_text_in_chat, show_alert=True)
+        except Exception:
+            pass
         if (
             settings.TRIAL_ENABLED
             and not await subscription_service.has_had_any_subscription(
@@ -244,12 +270,8 @@ async def confirm_activate_trial_handler(
             f"Could not edit trial result message: {e_edit}. Sending new one."
         )
 
-        if (
-            callback.message
-            and hasattr(callback.message, "chat")
-            and callback.message.chat
-        ):
-            await callback.message.chat.send_message(
+        if callback.message:
+            await callback.message.answer(
                 final_message_text_in_chat,
                 parse_mode="HTML",
                 reply_markup=get_main_menu_inline_keyboard(

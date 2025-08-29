@@ -43,10 +43,9 @@ async def send_main_menu(target_event: Union[types.Message,
                 await target_event.answer(err_msg_fallback, show_alert=True)
             except Exception:
                 pass
-        elif isinstance(target_event, types.Message) and hasattr(
-                target_event, 'chat') and target_event.chat:
+        elif isinstance(target_event, types.Message):
             try:
-                await target_event.chat.send_message(err_msg_fallback)
+                await target_event.answer(err_msg_fallback)
             except Exception:
                 pass
         return
@@ -93,23 +92,27 @@ async def send_main_menu(target_event: Union[types.Message,
             await target_message_obj.answer(text, reply_markup=reply_markup)
 
         if isinstance(target_event, types.CallbackQuery):
-            await target_event.answer()
+            try:
+                await target_event.answer()
+            except Exception:
+                pass
     except Exception as e_send_edit:
         logging.warning(
             f"Failed to send/edit main menu (user: {user_id}, is_edit: {is_edit}): {type(e_send_edit).__name__} - {e_send_edit}."
         )
-        if is_edit and target_message_obj and hasattr(
-                target_message_obj, 'chat') and target_message_obj.chat:
+        if is_edit and target_message_obj:
             try:
-                await target_message_obj.chat.send_message(
-                    text, reply_markup=reply_markup)
+                await target_message_obj.answer(text, reply_markup=reply_markup)
             except Exception as e_send_new:
                 logging.error(
                     f"Also failed to send new main menu message for user {user_id}: {e_send_new}"
                 )
         if isinstance(target_event, types.CallbackQuery):
-            await target_event.answer(
-                _("error_occurred_try_again") if is_edit else None)
+            try:
+                await target_event.answer(
+                    _("error_occurred_try_again") if is_edit else None)
+            except Exception:
+                pass
 
 
 @router.message(CommandStart())
