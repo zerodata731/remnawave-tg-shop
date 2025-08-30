@@ -11,6 +11,7 @@ from bot.services.notification_service import NotificationService
 from bot.keyboards.inline.user_keyboards import (
     get_trial_confirmation_keyboard,
     get_main_menu_inline_keyboard,
+    get_connect_and_main_keyboard,
 )
 from bot.middlewares.i18n import JsonI18n
 from .start import send_main_menu
@@ -75,6 +76,7 @@ async def request_trial_confirmation_handler(
 
     final_message_text_in_chat = ""
     show_trial_button_after_action = False
+    config_link_for_trial = None
 
     if activation_result and activation_result.get("activated"):
         try:
@@ -130,13 +132,21 @@ async def request_trial_confirmation_handler(
         ):
             show_trial_button_after_action = True
 
+    reply_markup = (
+        get_connect_and_main_keyboard(
+            current_lang, i18n, settings, config_link_for_trial
+        )
+        if activation_result and activation_result.get("activated")
+        else get_main_menu_inline_keyboard(
+            current_lang, i18n, settings, show_trial_button_after_action
+        )
+    )
+
     try:
         await callback.message.edit_text(
             final_message_text_in_chat,
             parse_mode="HTML",
-            reply_markup=get_main_menu_inline_keyboard(
-                current_lang, i18n, settings, show_trial_button_after_action
-            ),
+            reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
     except Exception as e_edit:
@@ -148,9 +158,7 @@ async def request_trial_confirmation_handler(
             await callback.message.answer(
                 final_message_text_in_chat,
                 parse_mode="HTML",
-                reply_markup=get_main_menu_inline_keyboard(
-                    current_lang, i18n, settings, show_trial_button_after_action
-                ),
+                reply_markup=reply_markup,
                 disable_web_page_preview=True,
             )
 
@@ -205,6 +213,7 @@ async def confirm_activate_trial_handler(
 
     final_message_text_in_chat = ""
     show_trial_button_after_action = False
+    config_link_for_trial = None
 
     if activation_result and activation_result.get("activated"):
         try:
@@ -256,13 +265,21 @@ async def confirm_activate_trial_handler(
         ):
             show_trial_button_after_action = True
 
+    reply_markup = (
+        get_connect_and_main_keyboard(
+            current_lang, i18n, settings, config_link_for_trial
+        )
+        if activation_result and activation_result.get("activated")
+        else get_main_menu_inline_keyboard(
+            current_lang, i18n, settings, show_trial_button_after_action
+        )
+    )
+
     try:
         await callback.message.edit_text(
             final_message_text_in_chat,
             parse_mode="HTML",
-            reply_markup=get_main_menu_inline_keyboard(
-                current_lang, i18n, settings, show_trial_button_after_action
-            ),
+            reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
     except Exception as e_edit:
@@ -274,9 +291,7 @@ async def confirm_activate_trial_handler(
             await callback.message.answer(
                 final_message_text_in_chat,
                 parse_mode="HTML",
-                reply_markup=get_main_menu_inline_keyboard(
-                    current_lang, i18n, settings, show_trial_button_after_action
-                ),
+                reply_markup=reply_markup,
                 disable_web_page_preview=True,
             )
 
