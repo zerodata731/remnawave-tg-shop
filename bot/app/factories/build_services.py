@@ -45,7 +45,7 @@ def build_core_services(
         subscription_service,
         referral_service,
     )
-    panel_webhook_service = PanelWebhookService(bot, settings, i18n, async_session_factory)
+    panel_webhook_service = PanelWebhookService(bot, settings, i18n, async_session_factory, panel_service)
     yookassa_service = YooKassaService(
         shop_id=settings.YOOKASSA_SHOP_ID,
         secret_key=settings.YOOKASSA_SECRET_KEY,

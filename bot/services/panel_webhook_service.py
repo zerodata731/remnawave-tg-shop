@@ -8,6 +8,7 @@ from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy.orm import sessionmaker
 from typing import Optional
 from config.settings import Settings
+from .panel_api_service import PanelApiService
 from bot.middlewares.i18n import JsonI18n
 from bot.keyboards.inline.user_keyboards import get_subscribe_only_markup
 from db.dal import user_dal
@@ -20,11 +21,12 @@ EVENT_MAP = {
 }
 
 class PanelWebhookService:
-    def __init__(self, bot: Bot, settings: Settings, i18n: JsonI18n, async_session_factory: sessionmaker):
+    def __init__(self, bot: Bot, settings: Settings, i18n: JsonI18n, async_session_factory: sessionmaker, panel_service: PanelApiService):
         self.bot = bot
         self.settings = settings
         self.i18n = i18n
         self.async_session_factory = async_session_factory
+        self.panel_service = panel_service
 
     async def _send_message(
         self,
@@ -72,6 +74,7 @@ class PanelWebhookService:
                     # Extend subscription by the last payment duration (calendar months)
                     new_end_date = add_months(datetime.now(timezone.utc), last_tribute_duration)
                     
+                    # Update local DB subscription
                     await subscription_dal.update_subscription(
                         session,
                         sub.subscription_id,
@@ -81,6 +84,56 @@ class PanelWebhookService:
                             'is_active': True
                         }
                     )
+                    # Update panel expiry to ensure actual service access is extended
+                    try:
+                        panel_payload = {
+                            "uuid": sub.panel_user_uuid,
+                            "expireAt": new_end_date.isoformat(timespec='milliseconds').replace('+00:00', 'Z'),
+                            "status": "ACTIVE",
+                        }
+                        panel_update_resp = await self.panel_service.update_user_details_on_panel(
+                            sub.panel_user_uuid,
+                            panel_payload,
+                            log_response=True,
+                        )
+                        if panel_update_resp:
+                            logging.info(
+                                f"Panel expiry updated for user {user_id} (panel_uuid {sub.panel_user_uuid}) to {new_end_date}"
+                            )
+                    except Exception as e_panel:
+                        logging.error(
+                            f"Failed to update panel expiry for user {user_id} (panel_uuid {sub.panel_user_uuid}): {e_panel}")
+
+                    # Create a succeeded payment record in DB with the same amount/currency as last tribute payment
+                    try:
+                        last_payment = await payment_dal.get_last_tribute_payment(session, user_id)
+                        if last_payment and last_payment.amount and last_payment.currency:
+                            provider_payment_id = (
+                                f"tribute_auto_{user_id}_{sub.subscription_id}_"
+                                f"{new_end_date.strftime('%Y%m%d')}"
+                            )
+                            created_payment = await payment_dal.ensure_payment_with_provider_id(
+                                session,
+                                user_id=user_id,
+                                amount=float(last_payment.amount),
+                                currency=last_payment.currency,
+                                months=last_tribute_duration,
+                                description="Auto-renewal (panel webhook)",
+                                provider="tribute",
+                                provider_payment_id=provider_payment_id,
+                            )
+                            if created_payment:
+                                logging.info(
+                                    f"Auto-renew payment recorded (id={created_payment.payment_id}) for user {user_id} amount={created_payment.amount} {created_payment.currency} months={last_tribute_duration}"
+                                )
+                        else:
+                            logging.warning(
+                                f"Could not create auto-renew payment for user {user_id}: previous tribute payment not found or missing amount/currency")
+                    except Exception as e_pay:
+                        logging.error(
+                            f"Failed to create auto-renew payment record for user {user_id}: {e_pay}",
+                            exc_info=True,
+                        )
                     
                     # Send auto-renewal notification
                     _ = lambda k, **kw: self.i18n.gettext(lang, k, **kw) if self.i18n else k

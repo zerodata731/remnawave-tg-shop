@@ -157,6 +157,7 @@ async def create_user_stats_result(session: AsyncSession, i18n_instance, lang: s
                    "🚫 Заблокированных: <b>{banned}</b>\n"
                    "🎁 Привлечено по реферальной программе: <b>{referral}</b>",
             total=user_stats['total_users'],
+            active_today=user_stats['active_today'],
             paid=user_stats['paid_subscriptions'],
             trial=user_stats['trial_users'],
             inactive=user_stats['inactive_users'],

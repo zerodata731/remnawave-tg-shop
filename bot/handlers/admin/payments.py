@@ -77,7 +77,7 @@ async def view_payments_handler(callback: types.CallbackQuery, i18n_data: dict,
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    page_size = 5  # Показываем по 5 платежей на странице
+    page_size = 5  # Show 5 payments per page
     payments, total_count = await get_payments_with_pagination(session, page, page_size)
     total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 1
 
@@ -92,7 +92,11 @@ async def view_payments_handler(callback: types.CallbackQuery, i18n_data: dict,
 
     # Format payments text
     text_parts = [_("admin_payments_header", default="💰 <b>Все платежи</b>")]
-    text_parts.append(f"📊 Показано {len(payments)} из {total_count} платежей (стр. {page + 1}/{total_pages})\n")
+    text_parts.append(_("admin_payments_pagination_info", 
+                       shown=len(payments), 
+                       total=total_count, 
+                       current_page=page + 1, 
+                       total_pages=total_pages) + "\n")
     
     for i, payment in enumerate(payments, 1):
         text_parts.append(f"<b>{page * page_size + i}.</b> {format_payment_text(payment, i18n, current_lang)}")
@@ -225,12 +229,12 @@ async def export_payments_csv_handler(callback: types.CallbackQuery, i18n_data: 
         await callback.message.reply_document(
             document=file,
             caption=_("admin_payments_export_success", 
-                     default="📊 Экспорт платежей завершен!\nВсего записей: {count}",
+                     default="📊 Payments export completed!\nTotal records: {count}",
                      count=len(all_payments))
         )
         
         await callback.answer(
-            _("admin_export_sent", default="Файл отправлен!"),
+            _("admin_export_sent", default="File sent!"),
             show_alert=False
         )
         

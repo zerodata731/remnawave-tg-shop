@@ -35,7 +35,10 @@ async def display_subscription_options(event: Union[types.Message,
     if not i18n:
         err_msg = "Language service error."
         if isinstance(event, types.CallbackQuery):
-            await event.answer(err_msg, show_alert=True)
+            try:
+                await event.answer(err_msg, show_alert=True)
+            except Exception:
+                pass
         elif isinstance(event, types.Message):
             await event.answer(err_msg)
         return
@@ -54,8 +57,11 @@ async def display_subscription_options(event: Union[types.Message,
         event, types.CallbackQuery) else event
     if not target_message_obj:
         if isinstance(event, types.CallbackQuery):
-            await event.answer(get_text("error_occurred_try_again"),
-                               show_alert=True)
+            try:
+                await event.answer(get_text("error_occurred_try_again"),
+                                   show_alert=True)
+            except Exception:
+                pass
         return
 
     if isinstance(event, types.CallbackQuery):
@@ -65,7 +71,10 @@ async def display_subscription_options(event: Union[types.Message,
         except Exception:
             await target_message_obj.answer(text_content,
                                             reply_markup=reply_markup)
-        await event.answer()
+        try:
+            await event.answer()
+        except Exception:
+            pass
     else:
         await target_message_obj.answer(text_content,
                                         reply_markup=reply_markup)
@@ -81,8 +90,11 @@ async def select_subscription_period_callback_handler(
                                                   ) if i18n else key
 
     if not i18n or not callback.message:
-        await callback.answer(get_text("error_occurred_try_again"),
-                              show_alert=True)
+        try:
+            await callback.answer(get_text("error_occurred_try_again"),
+                                  show_alert=True)
+        except Exception:
+            pass
         return
 
     try:
@@ -90,7 +102,10 @@ async def select_subscription_period_callback_handler(
     except (ValueError, IndexError):
         logging.error(
             f"Invalid subscription period in callback_data: {callback.data}")
-        await callback.answer(get_text("error_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     price_rub = settings.subscription_options.get(months)
@@ -98,7 +113,10 @@ async def select_subscription_period_callback_handler(
         logging.error(
             f"Price not found for {months} months subscription period in settings.subscription_options."
         )
-        await callback.answer(get_text("error_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     currency_symbol_val = settings.DEFAULT_CURRENCY_SYMBOL
@@ -125,7 +143,10 @@ async def select_subscription_period_callback_handler(
         )
         await callback.message.answer(text_content,
                                       reply_markup=reply_markup)
-    await callback.answer()
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("pay_stars:"))
@@ -138,7 +159,10 @@ async def pay_stars_callback_handler(
     get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     if not i18n or not callback.message:
-        await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     try:
@@ -148,7 +172,10 @@ async def pay_stars_callback_handler(
         stars_price = int(price_str)
     except (ValueError, IndexError):
         logging.error(f"Invalid pay_stars data in callback: {callback.data}")
-        await callback.answer(get_text("error_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     user_id = callback.from_user.id
@@ -158,10 +185,16 @@ async def pay_stars_callback_handler(
         session, user_id, months, stars_price, payment_description)
     if payment_id is None:
         await callback.message.edit_text(get_text("error_payment_gateway"))
-        await callback.answer(get_text("error_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
-    await callback.answer()
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("pay_yk:"))
@@ -175,9 +208,11 @@ async def pay_yk_callback_handler(
                                                   ) if i18n else key
 
     if not i18n or not callback.message:
-
-        await callback.answer(get_text("error_occurred_try_again"),
-                              show_alert=True)
+        try:
+            await callback.answer(get_text("error_occurred_try_again"),
+                                  show_alert=True)
+        except Exception:
+            pass
         return
 
     if not yookassa_service or not yookassa_service.configured:
@@ -185,8 +220,11 @@ async def pay_yk_callback_handler(
         target_msg_edit = callback.message
         await target_msg_edit.edit_text(get_text("payment_service_unavailable")
                                         )
-        await callback.answer(get_text("payment_service_unavailable_alert"),
-                              show_alert=True)
+        try:
+            await callback.answer(get_text("payment_service_unavailable_alert"),
+                                  show_alert=True)
+        except Exception:
+            pass
         return
 
     try:
@@ -197,7 +235,10 @@ async def pay_yk_callback_handler(
     except (ValueError, IndexError):
         logging.error(
             f"Invalid pay_yk data in callback: {callback.data}")
-        await callback.answer(get_text("error_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     user_id = callback.from_user.id
@@ -229,13 +270,19 @@ async def pay_yk_callback_handler(
             exc_info=True)
         await callback.message.edit_text(
             get_text("error_creating_payment_record"))
-        await callback.answer(get_text("error_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     if not db_payment_record:
         await callback.message.edit_text(
             get_text("error_creating_payment_record"))
-        await callback.answer(get_text("error_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     yookassa_metadata = {
@@ -267,7 +314,10 @@ async def pay_yk_callback_handler(
                 exc_info=True)
             await callback.message.edit_text(
                 get_text("error_payment_gateway_link_failed"))
-            await callback.answer(get_text("error_try_again"), show_alert=True)
+            try:
+                await callback.answer(get_text("error_try_again"), show_alert=True)
+            except Exception:
+                pass
             return
 
         await callback.message.edit_text(
@@ -291,7 +341,10 @@ async def pay_yk_callback_handler(
         )
         await callback.message.edit_text(get_text("error_payment_gateway"))
 
-    await callback.answer()
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("pay_crypto:"))
@@ -303,12 +356,18 @@ async def pay_crypto_callback_handler(
     get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     if not i18n or not callback.message:
-        await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     if not cryptopay_service or not cryptopay_service.configured:
         await callback.message.edit_text(get_text("payment_service_unavailable"))
-        await callback.answer(get_text("payment_service_unavailable_alert"), show_alert=True)
+        try:
+            await callback.answer(get_text("payment_service_unavailable_alert"), show_alert=True)
+        except Exception:
+            pass
         return
 
     try:
@@ -318,7 +377,10 @@ async def pay_crypto_callback_handler(
         amount_val = float(amount_str)
     except (ValueError, IndexError):
         logging.error(f"Invalid pay_crypto data in callback: {callback.data}")
-        await callback.answer(get_text("error_try_again"), show_alert=True)
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
         return
 
     user_id = callback.from_user.id
@@ -334,7 +396,10 @@ async def pay_crypto_callback_handler(
         )
     else:
         await callback.message.edit_text(get_text("error_payment_gateway"))
-    await callback.answer()
+    try:
+        await callback.answer()
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data == "main_action:subscribe")
@@ -387,7 +452,10 @@ async def my_subscription_command_handler(
         )
 
         if isinstance(event, types.CallbackQuery):
-            await event.answer()
+            try:
+                await event.answer()
+            except Exception:
+                pass
             try:
                 await event.message.edit_text(text, reply_markup=kb)
             except:
@@ -421,7 +489,10 @@ async def my_subscription_command_handler(
     markup = get_back_to_main_menu_markup(current_lang, i18n)
 
     if isinstance(event, types.CallbackQuery):
-        await event.answer()
+        try:
+            await event.answer()
+        except Exception:
+            pass
         try:
             await event.message.edit_text(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
         except:

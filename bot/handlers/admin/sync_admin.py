@@ -136,6 +136,23 @@ async def perform_sync(panel_service: PanelApiService, session: AsyncSession,
                     users_uuid_updated += 1
                     logging.info(f"Updated panel UUID for user {actual_user_id}: {panel_uuid}")
 
+                # Ensure panel description contains Telegram fields
+                try:
+                    if panel_uuid and existing_user:
+                        description_text = "\n".join([
+                            existing_user.username or "",
+                            existing_user.first_name or "",
+                            existing_user.last_name or "",
+                        ])
+                        if description_text.strip():
+                            await panel_service.update_user_details_on_panel(
+                                panel_uuid, {"description": description_text}
+                            )
+                except Exception as e_desc:
+                    logging.warning(
+                        f"Sync: Failed to update description for panel user {panel_uuid} (tg {actual_user_id}): {e_desc}"
+                    )
+
                 # Sync subscription data
                 panel_expire_at_iso = panel_user_dict.get("expireAt")
                 panel_status = panel_user_dict.get("status", "UNKNOWN")

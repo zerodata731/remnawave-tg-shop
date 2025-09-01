@@ -97,14 +97,27 @@ async def process_broadcast_message_handler(
 
     # Отправляем превью-копию того, что будет разослано
     try:
-        await send_message_by_type(
-            bot, 
-            chat_id=message.chat.id, 
-            content=content,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-            disable_notification=True,
-        )
+        # Для медиа-сообщений используем caption_entities, для текста - entities
+        if content.content_type == "text":
+            await send_message_by_type(
+                bot, 
+                chat_id=message.chat.id, 
+                content=content,
+                parse_mode="HTML",
+                entities=entities,
+                disable_web_page_preview=True,
+                disable_notification=True,
+            )
+        else:
+            await send_message_by_type(
+                bot, 
+                chat_id=message.chat.id, 
+                content=content,
+                parse_mode="HTML",
+                caption_entities=entities,
+                disable_web_page_preview=True,
+                disable_notification=True,
+            )
     except TelegramBadRequest as e:
         await message.answer(
             _(
@@ -263,13 +276,25 @@ async def confirm_broadcast_callback_handler(
         # Queue all messages for sending
         for uid in user_ids:
             try:
-                await send_message_via_queue(
-                    queue_manager, 
-                    uid, 
-                    content,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
+                # Для медиа-сообщений используем caption_entities, для текста - entities
+                if content.content_type == "text":
+                    await send_message_via_queue(
+                        queue_manager, 
+                        uid, 
+                        content,
+                        parse_mode="HTML",
+                        entities=entities,
+                        disable_web_page_preview=True,
+                    )
+                else:
+                    await send_message_via_queue(
+                        queue_manager, 
+                        uid, 
+                        content,
+                        parse_mode="HTML",
+                        caption_entities=entities,
+                        disable_web_page_preview=True,
+                    )
                 sent_count += 1
                 
                 # Log successful queuing
@@ -312,15 +337,24 @@ async def confirm_broadcast_callback_handler(
         # Get queue stats for detailed report
         queue_stats = queue_manager.get_queue_stats()
         
-        result_message = f"""🚀 Рассылка поставлена в очередь!
-📤 В очередь добавлено: {sent_count}
-❌ Ошибок: {failed_count}
-
-📊 Статус очередей:
-👥 Очередь пользователей: {queue_stats['user_queue_size']} сообщений
-📢 Очередь групп: {queue_stats['group_queue_size']} сообщений
-
-ℹ️ Сообщения будут отправлены автоматически с соблюдением лимитов Telegram."""
+        result_message = (
+            _(
+                "broadcast_queue_result",
+                default=(
+                    "🚀 Рассылка поставлена в очередь!\n"
+                    "📤 В очередь добавлено: {sent_count}\n"
+                    "❌ Ошибок: {failed_count}\n\n"
+                    "📊 Статус очередей:\n"
+                    "👥 Очередь пользователей: {user_queue_size} сообщений\n"
+                    "📢 Очередь групп: {group_queue_size} сообщений\n\n"
+                    "ℹ️ Сообщения будут отправлены автоматически с соблюдением лимитов Telegram."
+                ),
+                sent_count=sent_count,
+                failed_count=failed_count,
+                user_queue_size=queue_stats["user_queue_size"],
+                group_queue_size=queue_stats["group_queue_size"],
+            )
+        )
         await callback.message.answer(
             result_message,
             reply_markup=get_back_to_admin_panel_keyboard(current_lang, i18n),

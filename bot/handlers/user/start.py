@@ -1,4 +1,5 @@
 import logging
+import re
 from aiogram import Router, F, types, Bot
 from aiogram.utils.text_decorations import html_decoration as hd
 from aiogram.filters import CommandStart, Command
@@ -42,10 +43,9 @@ async def send_main_menu(target_event: Union[types.Message,
                 await target_event.answer(err_msg_fallback, show_alert=True)
             except Exception:
                 pass
-        elif isinstance(target_event, types.Message) and hasattr(
-                target_event, 'chat') and target_event.chat:
+        elif isinstance(target_event, types.Message):
             try:
-                await target_event.chat.send_message(err_msg_fallback)
+                await target_event.answer(err_msg_fallback)
             except Exception:
                 pass
         return
@@ -92,33 +92,40 @@ async def send_main_menu(target_event: Union[types.Message,
             await target_message_obj.answer(text, reply_markup=reply_markup)
 
         if isinstance(target_event, types.CallbackQuery):
-            await target_event.answer()
+            try:
+                await target_event.answer()
+            except Exception:
+                pass
     except Exception as e_send_edit:
         logging.warning(
             f"Failed to send/edit main menu (user: {user_id}, is_edit: {is_edit}): {type(e_send_edit).__name__} - {e_send_edit}."
         )
-        if is_edit and target_message_obj and hasattr(
-                target_message_obj, 'chat') and target_message_obj.chat:
+        if is_edit and target_message_obj:
             try:
-                await target_message_obj.chat.send_message(
-                    text, reply_markup=reply_markup)
+                await target_message_obj.answer(text, reply_markup=reply_markup)
             except Exception as e_send_new:
                 logging.error(
                     f"Also failed to send new main menu message for user {user_id}: {e_send_new}"
                 )
         if isinstance(target_event, types.CallbackQuery):
-            await target_event.answer(
-                _("error_occurred_try_again") if is_edit else None)
+            try:
+                await target_event.answer(
+                    _("error_occurred_try_again") if is_edit else None)
+            except Exception:
+                pass
 
 
 @router.message(CommandStart())
+@router.message(CommandStart(magic=F.args.regexp(r"^ref_(\d+)$").as_("ref_match")))
+@router.message(CommandStart(magic=F.args.regexp(r"^promo_(\w+)$").as_("promo_match")))
 async def start_command_handler(message: types.Message,
                                 state: FSMContext,
                                 settings: Settings,
                                 i18n_data: dict,
                                 subscription_service: SubscriptionService,
                                 session: AsyncSession,
-                                command: Optional[CommandStart] = None):
+                                ref_match: Optional[re.Match] = None,
+                                promo_match: Optional[re.Match] = None):
     await state.clear()
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
@@ -130,28 +137,14 @@ async def start_command_handler(message: types.Message,
 
     referred_by_user_id: Optional[int] = None
     promo_code_to_apply: Optional[str] = None
-    
-    if command and command.args:
-        arg_payload = command.args
-        if arg_payload.startswith("ref_"):
-            try:
-                potential_referrer_id_str = arg_payload.split("_")[1]
-                if potential_referrer_id_str.isdigit():
-                    potential_referrer_id = int(potential_referrer_id_str)
-                    if potential_referrer_id != user_id:
-                        referred_by_user_id = potential_referrer_id
-            except (IndexError, ValueError) as e:
-                logging.warning(
-                    f"Could not parse referral from /start args '{arg_payload}': {e}"
-                )
-        elif arg_payload.startswith("promo_"):
-            try:
-                promo_code_to_apply = arg_payload.split("_")[1]
-                logging.info(f"User {user_id} started with promo code: {promo_code_to_apply}")
-            except (IndexError, ValueError) as e:
-                logging.warning(
-                    f"Could not parse promo code from /start args '{arg_payload}': {e}"
-                )
+
+    if ref_match:
+        potential_referrer_id = int(ref_match.group(1))
+        if await user_dal.get_user_by_id(session, potential_referrer_id):
+            referred_by_user_id = potential_referrer_id
+    elif promo_match:
+        promo_code_to_apply = promo_match.group(1)
+        logging.info(f"User {user_id} started with promo code: {promo_code_to_apply}")
 
     db_user = await user_dal.get_user_by_id(session, user_id)
     if not db_user:

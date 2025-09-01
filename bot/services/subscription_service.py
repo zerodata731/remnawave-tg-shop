@@ -119,6 +119,11 @@ class SubscriptionService:
                     creation_response = await self.panel_service.create_panel_user(
                         username_on_panel=panel_username_on_panel_standard,
                         telegram_id=user_id,
+                        description="\n".join([
+                            (db_user.username or "") if db_user else "",
+                            (db_user.first_name or "") if db_user else "",
+                            (db_user.last_name or "") if db_user else "",
+                        ]),
                         specific_squad_uuids=self.settings.parsed_user_squad_uuids,
                         default_traffic_limit_bytes=self.settings.user_traffic_limit_bytes,
                         default_traffic_limit_strategy=self.settings.USER_TRAFFIC_STRATEGY,
@@ -142,6 +147,11 @@ class SubscriptionService:
                 creation_response = await self.panel_service.create_panel_user(
                     username_on_panel=panel_username_on_panel_standard,
                     telegram_id=user_id,
+                    description="\n".join([
+                        (db_user.username or "") if db_user else "",
+                        (db_user.first_name or "") if db_user else "",
+                        (db_user.last_name or "") if db_user else "",
+                    ]),
                     specific_squad_uuids=self.settings.parsed_user_squad_uuids,
                     default_traffic_limit_bytes=self.settings.user_traffic_limit_bytes,
                     default_traffic_limit_strategy=self.settings.USER_TRAFFIC_STRATEGY,
@@ -258,8 +268,19 @@ class SubscriptionService:
             logging.info(
                 f"Panel user {current_local_panel_uuid} has telegramId '{panel_telegram_id_from_api}'. Updating on panel to '{user_id}'."
             )
+            # Also set readable description with Telegram fields
             await self.panel_service.update_user_details_on_panel(
-                current_local_panel_uuid, {"telegramId": user_id}
+                current_local_panel_uuid,
+                {
+                    "telegramId": user_id,
+                    "description": "\n".join(
+                        [
+                            (db_user.username or "") if db_user else "",
+                            (db_user.first_name or "") if db_user else "",
+                            (db_user.last_name or "") if db_user else "",
+                        ]
+                    ),
+                },
             )
 
         panel_sub_link_id = panel_user_obj_from_api.get(
@@ -354,6 +375,15 @@ class SubscriptionService:
             expire_at=end_date,
             status="ACTIVE",
             traffic_limit_bytes=self.settings.trial_traffic_limit_bytes,
+        )
+
+        # Add user description based on Telegram profile
+        panel_update_payload["description"] = "\n".join(
+            [
+                (db_user.username or "") if db_user else "",
+                (db_user.first_name or "") if db_user else "",
+                (db_user.last_name or "") if db_user else "",
+            ]
         )
 
         updated_panel_user = await self.panel_service.update_user_details_on_panel(
@@ -496,6 +526,15 @@ class SubscriptionService:
             expire_at=final_end_date,
             status="ACTIVE",
             traffic_limit_bytes=self.settings.user_traffic_limit_bytes,
+        )
+
+        # Add user description based on Telegram profile
+        panel_update_payload["description"] = "\n".join(
+            [
+                (db_user.username or "") if db_user else "",
+                (db_user.first_name or "") if db_user else "",
+                (db_user.last_name or "") if db_user else "",
+            ]
         )
 
         updated_panel_user = await self.panel_service.update_user_details_on_panel(
