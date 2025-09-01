@@ -251,3 +251,14 @@ async def get_last_tribute_payment_duration(session: AsyncSession, user_id: int)
     
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def get_last_tribute_payment(
+        session: AsyncSession, user_id: int) -> Optional[Payment]:
+    """Return the most recent succeeded Tribute payment for the user."""
+    stmt = (select(Payment).where(
+        and_(Payment.user_id == user_id, Payment.provider == 'tribute',
+             Payment.status == 'succeeded')).order_by(
+                 Payment.created_at.desc()).limit(1))
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
