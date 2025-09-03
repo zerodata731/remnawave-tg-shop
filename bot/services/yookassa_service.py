@@ -6,7 +6,6 @@ from typing import Optional, Dict, Any, List
 from yookassa import Configuration, Payment as YooKassaPayment
 from yookassa.domain.request.payment_request_builder import PaymentRequestBuilder
 from yookassa.domain.common.confirmation_type import ConfirmationType
-from yookassa.domain.models.payment_data import PaymentMethodType
 
 from config.settings import Settings
 
