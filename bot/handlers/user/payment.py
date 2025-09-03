@@ -58,6 +58,7 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
         subscription_months = int(subscription_months_str)
         payment_db_id = int(
             payment_db_id_str) if payment_db_id_str and payment_db_id_str.isdigit() else None
+        is_auto_renew = bool(auto_renew_subscription_id_str and not payment_db_id)
         promo_code_id = int(
             promo_code_id_str
         ) if promo_code_id_str and promo_code_id_str.isdigit() else None
@@ -199,53 +200,62 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
         user_lang = db_user.language_code if db_user and db_user.language_code else settings.DEFAULT_LANGUAGE
         _ = lambda key, **kwargs: i18n.gettext(user_lang, key, **kwargs)
 
-        config_link = activation_details.get("subscription_url") or _(
-            "config_link_not_available"
-        )
-
-        if applied_referee_bonus_days_from_referral and final_end_date_for_user:
-            inviter_name_display = _("friend_placeholder")
-            if db_user and db_user.referred_by_id:
-                inviter = await user_dal.get_user_by_id(
-                    session, db_user.referred_by_id)
-                if inviter and inviter.first_name:
-                    inviter_name_display = inviter.first_name
-                elif inviter and inviter.username:
-                    inviter_name_display = f"@{inviter.username}"
-
+        # For auto-renew charges, avoid re-sending config link; send concise message
+        if is_auto_renew and final_end_date_for_user:
             details_message = _(
-                "payment_successful_with_referral_bonus_full",
-                months=subscription_months,
-                base_end_date=base_subscription_end_date.strftime('%Y-%m-%d'),
-                bonus_days=applied_referee_bonus_days_from_referral,
-                final_end_date=final_end_date_for_user.strftime('%Y-%m-%d'),
-                inviter_name=inviter_name_display,
-                config_link=config_link,
-            )
-        elif applied_promo_bonus_days > 0 and final_end_date_for_user:
-            details_message = _(
-                "payment_successful_with_promo_full",
-                months=subscription_months,
-                bonus_days=applied_promo_bonus_days,
-                end_date=final_end_date_for_user.strftime('%Y-%m-%d'),
-                config_link=config_link,
-            )
-        elif final_end_date_for_user:
-            details_message = _(
-                "payment_successful_full",
+                "yookassa_auto_renewal",
                 months=subscription_months,
                 end_date=final_end_date_for_user.strftime('%Y-%m-%d'),
-                config_link=config_link,
             )
+            details_markup = None
         else:
-            logging.error(
-                f"Critical error: final_end_date_for_user is None for user {user_id} after successful payment logic."
+            config_link = activation_details.get("subscription_url") or _(
+                "config_link_not_available"
             )
-            details_message = _("payment_successful_error_details")
 
-        details_markup = get_connect_and_main_keyboard(
-            user_lang, i18n, settings, config_link
-        )
+            if applied_referee_bonus_days_from_referral and final_end_date_for_user:
+                inviter_name_display = _("friend_placeholder")
+                if db_user and db_user.referred_by_id:
+                    inviter = await user_dal.get_user_by_id(
+                        session, db_user.referred_by_id)
+                    if inviter and inviter.first_name:
+                        inviter_name_display = inviter.first_name
+                    elif inviter and inviter.username:
+                        inviter_name_display = f"@{inviter.username}"
+
+                details_message = _(
+                    "payment_successful_with_referral_bonus_full",
+                    months=subscription_months,
+                    base_end_date=base_subscription_end_date.strftime('%Y-%m-%d'),
+                    bonus_days=applied_referee_bonus_days_from_referral,
+                    final_end_date=final_end_date_for_user.strftime('%Y-%m-%d'),
+                    inviter_name=inviter_name_display,
+                    config_link=config_link,
+                )
+            elif applied_promo_bonus_days > 0 and final_end_date_for_user:
+                details_message = _(
+                    "payment_successful_with_promo_full",
+                    months=subscription_months,
+                    bonus_days=applied_promo_bonus_days,
+                    end_date=final_end_date_for_user.strftime('%Y-%m-%d'),
+                    config_link=config_link,
+                )
+            elif final_end_date_for_user:
+                details_message = _(
+                    "payment_successful_full",
+                    months=subscription_months,
+                    end_date=final_end_date_for_user.strftime('%Y-%m-%d'),
+                    config_link=config_link,
+                )
+            else:
+                logging.error(
+                    f"Critical error: final_end_date_for_user is None for user {user_id} after successful payment logic."
+                )
+                details_message = _("payment_successful_error_details")
+
+            details_markup = get_connect_and_main_keyboard(
+                user_lang, i18n, settings, config_link
+            )
         try:
             await bot.send_message(
                 user_id,

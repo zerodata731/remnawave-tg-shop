@@ -196,8 +196,10 @@ class PanelWebhookService:
                             if sub and sub.auto_renew_enabled and sub.provider != 'tribute':
                                 try:
                                     ok = await subscription_service.charge_subscription_renewal(session, sub)
+                                    # If initiation succeeded, suppress the 24h reminder by returning early
                                     if ok:
                                         await session.commit()
+                                        return
                                     else:
                                         await session.rollback()
                                 except Exception:

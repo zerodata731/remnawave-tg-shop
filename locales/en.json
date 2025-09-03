@@ -211,6 +211,7 @@
   "subscription_expired_yesterday_notification": "👋 Hi, {user_name}!\n\n⏳ Your VPN subscription expired yesterday ({end_date}).\n\nPlease renew it using the button below.",
   "tribute_subscription_cancelled": "🚨 <b>Subscription Cancelled</b>\n\nYour Tribute subscription has been cancelled. You have 24 hours to restore access, after which the subscription will be blocked.\n\nTo renew your subscription, press the button below.",
   "tribute_auto_renewal": "🔄 <b>Subscription Auto-Renewed</b>\n\nYour Tribute subscription has been automatically renewed for {months} months.\nNew expiration date: {end_date}",
+  "yookassa_auto_renewal": "🔄 <b>Subscription Auto-Renewed</b>\n\nYour subscription was automatically renewed for {months} month(s).\nNew expiration date: {end_date}",
   "admin_user_management_prompt": "👤 User Management\n\nEnter user ID or @username to search:",
   "admin_user_subscription_info": "Subscription Information:",
   "admin_user_reset_trial_button": "🔄 Reset Trial",
