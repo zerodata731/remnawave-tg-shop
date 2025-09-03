@@ -39,3 +39,16 @@ async def upsert_yk_payment_method(
     await session.flush()
     await session.refresh(record)
     return record
+
+
+async def delete_yk_payment_method(session: AsyncSession, user_id: int) -> bool:
+    existing = await get_user_billing(session, user_id)
+    if not existing:
+        return False
+    existing.yookassa_payment_method_id = None
+    existing.card_last4 = None
+    existing.card_network = None
+    existing.updated_at = func.now()
+    await session.flush()
+    await session.refresh(existing)
+    return True

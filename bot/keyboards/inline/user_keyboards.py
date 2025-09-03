@@ -229,3 +229,51 @@ def get_connect_and_main_keyboard(
     )
 
     return builder.as_markup()
+
+
+def get_payment_methods_manage_keyboard(lang: str, i18n_instance, has_card: bool) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    if has_card:
+        builder.row(
+            InlineKeyboardButton(text=_(key="payment_method_view_button"), callback_data="pm:view"),
+            InlineKeyboardButton(text=_(key="payment_method_delete_button"), callback_data="pm:delete_confirm"),
+        )
+    builder.row(
+        InlineKeyboardButton(text=_(key="payment_method_bind_button"), callback_data="pm:bind")
+    )
+    builder.row(
+        InlineKeyboardButton(text=_(key="back_to_main_menu_button"), callback_data="main_action:back_to_main")
+    )
+    return builder.as_markup()
+
+
+def get_payment_method_delete_confirm_keyboard(lang: str, i18n_instance) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text=_(key="yes_button"), callback_data="pm:delete"),
+        InlineKeyboardButton(text=_(key="cancel_button"), callback_data="pm:manage"),
+    )
+    return builder.as_markup()
+
+
+def get_payment_method_details_keyboard(lang: str, i18n_instance) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text=_(key="payment_method_tx_history_title"), callback_data="pm:history")
+    )
+    builder.row(
+        InlineKeyboardButton(text=_(key="back_to_main_menu_button"), callback_data="pm:manage")
+    )
+    return builder.as_markup()
+
+
+def get_bind_url_keyboard(bind_url: str, lang: str, i18n_instance) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.button(text=_(key="payment_method_bind_button"), url=bind_url)
+    builder.button(text=_(key="back_to_main_menu_button"), callback_data="pm:manage")
+    builder.adjust(1)
+    return builder.as_markup()

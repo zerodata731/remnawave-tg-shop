@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, List
 from yookassa import Configuration, Payment as YooKassaPayment
 from yookassa.domain.request.payment_request_builder import PaymentRequestBuilder
 from yookassa.domain.common.confirmation_type import ConfirmationType
+from yookassa.domain.models.payment_data import PaymentMethodType
 
 from config.settings import Settings
 
@@ -64,7 +65,8 @@ class YooKassaService:
             receipt_phone: Optional[str] = None,
             save_payment_method: bool = False,
             payment_method_id: Optional[str] = None,
-            capture: bool = True) -> Optional[Dict[str, Any]]:
+            capture: bool = True,
+            bind_only: bool = False) -> Optional[Dict[str, Any]]:
         if not self.configured:
             logging.error("YooKassa is not configured. Cannot create payment.")
             return None
@@ -105,6 +107,10 @@ class YooKassaService:
                 "value": str(round(amount, 2)),
                 "currency": currency.upper()
             })
+            # For binding cards only, do not capture and set minimal amount
+            if bind_only:
+                capture = False
+                amount = max(amount, 1.00)
             builder.set_capture(capture)
             builder.set_confirmation({
                 "type": ConfirmationType.REDIRECT,

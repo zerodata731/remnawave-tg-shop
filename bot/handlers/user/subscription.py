@@ -10,7 +10,9 @@ from config.settings import Settings
 from db.dal import payment_dal
 from bot.keyboards.inline.user_keyboards import (
     get_subscription_options_keyboard, get_payment_method_keyboard,
-    get_payment_url_keyboard, get_back_to_main_menu_markup)
+    get_payment_url_keyboard, get_back_to_main_menu_markup,
+    get_payment_methods_manage_keyboard, get_payment_method_delete_confirm_keyboard,
+    get_payment_method_details_keyboard, get_bind_url_keyboard)
 from bot.services.yookassa_service import YooKassaService
 from db.dal import user_billing_dal
 from bot.services.stars_service import StarsService
@@ -18,6 +20,7 @@ from bot.services.crypto_pay_service import CryptoPayService
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
 from bot.services.referral_service import ReferralService
+from bot.services.yookassa_service import YooKassaService
 from bot.middlewares.i18n import JsonI18n
 from db.dal import subscription_dal
 from db.models import Subscription
@@ -523,13 +526,15 @@ async def my_subscription_command_handler(
             else get_text("traffic_na")
         )
     )
-    # Build markup with auto-renew toggle if available
+    # Build markup with auto-renew toggle and payment methods if available
     base_markup = get_back_to_main_menu_markup(current_lang, i18n)
     kb = base_markup.inline_keyboard
     try:
         if 'local_sub' in locals() and local_sub and local_sub.provider != 'tribute':
             toggle_text = get_text("autorenew_disable_button") if local_sub.auto_renew_enabled else get_text("autorenew_enable_button")
             kb = [[InlineKeyboardButton(text=toggle_text, callback_data=f"toggle_autorenew:{local_sub.subscription_id}:{1 if not local_sub.auto_renew_enabled else 0}")]] + kb
+        # Add payment methods manage entry point
+        kb = [[InlineKeyboardButton(text=get_text("payment_methods_manage_button"), callback_data="pm:manage")]] + kb
     except Exception:
         pass
     markup = InlineKeyboardMarkup(inline_keyboard=kb)
@@ -583,6 +588,125 @@ async def toggle_autorenew_handler(callback: types.CallbackQuery, settings: Sett
         pass
     # Refresh panel info screen
     await my_subscription_command_handler(callback, i18n_data, settings, panel_service, subscription_service, session, bot)
+
+
+@router.callback_query(F.data == "pm:manage")
+async def payment_methods_manage(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    billing = await user_billing_dal.get_user_billing(session, callback.from_user.id)
+    has_card = bool(billing and billing.yookassa_payment_method_id)
+    text = _("payment_methods_title")
+    if not has_card:
+        text += "\n\n" + _("payment_method_none")
+    await callback.message.edit_text(text, reply_markup=get_payment_methods_manage_keyboard(current_lang, i18n, has_card))
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "pm:bind")
+async def payment_method_bind(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession, yookassa_service: YooKassaService):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    # Create a minimal binding payment (1 RUB) with save_payment_method
+    metadata = {
+        "user_id": str(callback.from_user.id),
+        "bind_only": "1",
+    }
+    resp = await yookassa_service.create_payment(
+        amount=1.00,
+        currency="RUB",
+        description="Bind card",
+        metadata=metadata,
+        receipt_email=settings.YOOKASSA_DEFAULT_RECEIPT_EMAIL,
+        save_payment_method=True,
+        capture=False,
+        bind_only=True,
+    )
+    if not resp or not resp.get("confirmation_url"):
+        await callback.answer(_("error_payment_gateway"), show_alert=True)
+        return
+    await callback.message.edit_text(_("payment_methods_title"), reply_markup=get_bind_url_keyboard(resp["confirmation_url"], current_lang, i18n))
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "pm:delete_confirm")
+async def payment_method_delete_confirm(callback: types.CallbackQuery, settings: Settings, i18n_data: dict):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+    await callback.message.edit_text(_("payment_method_delete_confirm"), reply_markup=get_payment_method_delete_confirm_keyboard(current_lang, i18n))
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "pm:delete")
+async def payment_method_delete(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+    deleted = await user_billing_dal.delete_yk_payment_method(session, callback.from_user.id)
+    await session.commit()
+    msg = _("payment_method_deleted_success") if deleted else _("error_try_again")
+    await callback.message.edit_text(msg, reply_markup=get_payment_methods_manage_keyboard(current_lang, i18n, has_card=False))
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "pm:view")
+async def payment_method_view(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    billing = await user_billing_dal.get_user_billing(session, callback.from_user.id)
+    if not billing or not billing.yookassa_payment_method_id:
+        await callback.answer(_("payment_method_none"), show_alert=True)
+        return
+    added_at = billing.created_at.strftime('%Y-%m-%d') if getattr(billing, 'created_at', None) else "—"
+    # Placeholder for last tx; real data requires querying payments
+    last_tx = "—"
+    title = _("payment_method_card_title", network=billing.card_network or "Card", last4=billing.card_last4 or "????")
+    details = f"{title}\n{_('payment_method_added_at', date=added_at)}\n{_('payment_method_last_tx', date=last_tx)}"
+    await callback.message.edit_text(details, reply_markup=get_payment_method_details_keyboard(current_lang, i18n))
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "pm:history")
+async def payment_method_history(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    # Simple history from payments table filtered by user
+    from db.dal import payment_dal
+    payments = await payment_dal.get_recent_payment_logs_with_user(session, limit=10, offset=0)
+    user_payments = [p for p in payments if p.user_id == callback.from_user.id]
+    if not user_payments:
+        await callback.message.edit_text(_("payment_method_no_history"), reply_markup=get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True))
+        return
+    lines = [
+        f"{p.created_at.strftime('%Y-%m-%d')} — {p.amount} {p.currency} — {p.provider} — {p.status}"
+        for p in user_payments
+    ]
+    text = _("payment_method_tx_history_title") + "\n\n" + "\n".join(lines)
+    await callback.message.edit_text(text, reply_markup=get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True))
 
 
 @router.pre_checkout_query()
