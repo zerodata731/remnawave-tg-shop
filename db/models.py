@@ -72,6 +72,7 @@ class Subscription(Base):
     last_notification_sent = Column(DateTime(timezone=True), nullable=True)
     provider = Column(String, nullable=True)
     skip_notifications = Column(Boolean, default=False)
+    auto_renew_enabled = Column(Boolean, default=False, index=True)
 
     user = relationship("User", back_populates="subscriptions")
 
@@ -111,6 +112,19 @@ class Payment(Base):
     promo_code_used = relationship("PromoCode",
                                    back_populates="payments_where_used")
 
+
+class UserBilling(Base):
+    __tablename__ = "user_billing"
+
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), primary_key=True)
+    # Saved payment method for off-session recurring charges (YooKassa)
+    yookassa_payment_method_id = Column(String, nullable=True, unique=True)
+    card_last4 = Column(String, nullable=True)
+    card_network = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
+    user = relationship("User")
 
 class PromoCode(Base):
     __tablename__ = "promo_codes"

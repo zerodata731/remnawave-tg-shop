@@ -11,6 +11,9 @@ services:
     volumes:
       - ./locales:/app/locales
     restart: unless-stopped
+    depends_on:
+      remnawave-tg-shop-db:
+        condition: service_healthy
 
   remnawave-tg-shop-db:
     image: postgres:17
@@ -23,6 +26,11 @@ services:
     networks:
       - remnawave-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 networks:
   remnawave-network:

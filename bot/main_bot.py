@@ -293,6 +293,37 @@ async def run_bot(settings_param: Settings):
 
     main_tasks.append(asyncio.create_task(web_server_task(), name="AIOHTTPServerTask"))
 
+    async def recurring_billing_task():
+        # Run periodic check to bill 1 day before expiry
+        async_session_factory = dp.get("async_session_factory")
+        subscription_service = dp.get("subscription_service")
+        if not async_session_factory or not subscription_service:
+            logging.warning("Recurring billing task: dependencies missing; task not started")
+            return
+        while True:
+            try:
+                async with async_session_factory() as session:
+                    # Find subscriptions ending in 1 day
+                    subs = await subscription_service.get_subscriptions_ending_soon(session, 1)
+                    # We need actual Subscription objects; reuse DAL directly
+                    from db.dal import subscription_dal
+                    subs_models = await subscription_dal.get_subscriptions_near_expiration(session, 1)
+                    handled = 0
+                    for sub in subs_models:
+                        try:
+                            ok = await subscription_service.charge_subscription_renewal(session, sub)
+                            handled += 1 if ok else 0
+                        except Exception:
+                            logging.exception("Auto-renew attempt failed")
+                    if handled:
+                        await session.commit()
+            except Exception:
+                logging.exception("Recurring billing iteration failed")
+            # Sleep 1 hour between scans
+            await asyncio.sleep(3600)
+
+    main_tasks.append(asyncio.create_task(recurring_billing_task(), name="RecurringBillingTask"))
+
     logging.info("Starting bot in Webhook mode with AIOHTTP server...")
     logging.info(f"Starting bot with main tasks: {[task.get_name() for task in main_tasks]}")
 

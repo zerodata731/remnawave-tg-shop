@@ -12,12 +12,14 @@ from bot.keyboards.inline.user_keyboards import (
     get_subscription_options_keyboard, get_payment_method_keyboard,
     get_payment_url_keyboard, get_back_to_main_menu_markup)
 from bot.services.yookassa_service import YooKassaService
+from db.dal import user_billing_dal
 from bot.services.stars_service import StarsService
 from bot.services.crypto_pay_service import CryptoPayService
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
 from bot.services.referral_service import ReferralService
 from bot.middlewares.i18n import JsonI18n
+from db.dal import subscription_dal
 
 router = Router(name="user_subscription_router")
 
@@ -297,9 +299,25 @@ async def pay_yk_callback_handler(
         currency=currency_code_for_yk,
         description=payment_description,
         metadata=yookassa_metadata,
-        receipt_email=receipt_email_for_yk)
+        receipt_email=receipt_email_for_yk,
+        save_payment_method=True)
 
     if payment_response_yk and payment_response_yk.get("confirmation_url"):
+        # If YooKassa already provided a payment_method (rare on redirect), store it
+        pm = payment_response_yk.get("payment_method")
+        try:
+            if pm and pm.get('id'):
+                await user_billing_dal.upsert_yk_payment_method(
+                    session,
+                    user_id=user_id,
+                    payment_method_id=pm['id'],
+                    card_last4=pm.get('last4'),
+                    card_network=pm.get('card', {}).get('card_type') if isinstance(pm.get('card'), dict) else None,
+                )
+                await session.commit()
+        except Exception:
+            await session.rollback()
+            logging.exception("Failed to save YooKassa payment method preliminarily")
         try:
             await payment_dal.update_payment_status_by_db_id(
                 session,
@@ -469,6 +487,24 @@ async def my_subscription_command_handler(
         (end_date.date() - datetime.now().date()).days
         if end_date else 0
     )
+    # Auto-renew toggle hint and Tribute notice
+    tribute_hint = ""
+    if active.get("status_from_panel", "").lower() == "active":
+        # Try to infer provider; fetch local sub for flags
+        # NOTE: Lightweight lookup by user_id
+        local_sub = await subscription_dal.get_active_subscription_by_user_id(session, event.from_user.id)
+        auto_renew_state = None
+        if local_sub:
+            auto_renew_state = local_sub.auto_renew_enabled
+            if local_sub.provider == "tribute":
+                link = None
+                link = (settings.tribute_payment_links.get(local_sub.duration_months or 1)
+                        if hasattr(settings, 'tribute_payment_links') else None)
+                if link:
+                    tribute_hint = "\n\n" + get_text("subscription_tribute_notice_with_link", link=link)
+                else:
+                    tribute_hint = "\n\n" + get_text("subscription_tribute_notice")
+
     text = get_text(
         "my_subscription_details",
         end_date=end_date.strftime("%Y-%m-%d") if end_date else "N/A",
@@ -486,7 +522,16 @@ async def my_subscription_command_handler(
             else get_text("traffic_na")
         )
     )
-    markup = get_back_to_main_menu_markup(current_lang, i18n)
+    # Build markup with auto-renew toggle if available
+    base_markup = get_back_to_main_menu_markup(current_lang, i18n)
+    kb = base_markup.inline_keyboard
+    try:
+        if 'local_sub' in locals() and local_sub and local_sub.provider != 'tribute':
+            toggle_text = get_text("autorenew_disable_button") if local_sub.auto_renew_enabled else get_text("autorenew_enable_button")
+            kb = [[InlineKeyboardButton(text=toggle_text, callback_data=f"toggle_autorenew:{local_sub.subscription_id}:{1 if not local_sub.auto_renew_enabled else 0}")]] + kb
+    except Exception:
+        pass
+    markup = InlineKeyboardMarkup(inline_keyboard=kb)
 
     if isinstance(event, types.CallbackQuery):
         try:
@@ -494,11 +539,50 @@ async def my_subscription_command_handler(
         except Exception:
             pass
         try:
-            await event.message.edit_text(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+            await event.message.edit_text(text + tribute_hint, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
         except:
-            await bot.send_message(chat_id=target.chat.id, text=text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+            await bot.send_message(chat_id=target.chat.id, text=text + tribute_hint, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
     else:
-        await target.answer(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+        await target.answer(text + tribute_hint, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+
+
+@router.callback_query(F.data.startswith("toggle_autorenew:"))
+async def toggle_autorenew_handler(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession, subscription_service: SubscriptionService, panel_service: PanelApiService, bot: Bot):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    try:
+        _, payload = callback.data.split(":", 1)
+        sub_id_str, enable_str = payload.split(":")
+        sub_id = int(sub_id_str)
+        enable = bool(int(enable_str))
+    except Exception:
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    sub = await session.get(type(subscription_service).__annotations__.get('sub', Subscription), sub_id)  # fallback avoids import cycle
+    # Better: direct DAL fetch
+    sub = await session.get(Subscription, sub_id)
+    if not sub or sub.user_id != callback.from_user.id:
+        await callback.answer(get_text("error_try_again"), show_alert=True)
+        return
+    if sub.provider == 'tribute':
+        await callback.answer(get_text("subscription_autorenew_not_supported_for_tribute"), show_alert=True)
+        return
+
+    await subscription_dal.update_subscription(session, sub.subscription_id, {"auto_renew_enabled": enable})
+    await session.commit()
+
+    try:
+        await callback.answer(get_text("subscription_autorenew_updated"))
+    except Exception:
+        pass
+    # Refresh panel info screen
+    await my_subscription_command_handler(callback, i18n_data, settings, panel_service, subscription_service, session, bot)
 
 
 @router.pre_checkout_query()

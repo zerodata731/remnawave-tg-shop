@@ -61,7 +61,10 @@ class YooKassaService:
             description: str,
             metadata: Dict[str, Any],
             receipt_email: Optional[str] = None,
-            receipt_phone: Optional[str] = None) -> Optional[Dict[str, Any]]:
+            receipt_phone: Optional[str] = None,
+            save_payment_method: bool = False,
+            payment_method_id: Optional[str] = None,
+            capture: bool = True) -> Optional[Dict[str, Any]]:
         if not self.configured:
             logging.error("YooKassa is not configured. Cannot create payment.")
             return None
@@ -102,13 +105,19 @@ class YooKassaService:
                 "value": str(round(amount, 2)),
                 "currency": currency.upper()
             })
-            builder.set_capture(True)
+            builder.set_capture(capture)
             builder.set_confirmation({
                 "type": ConfirmationType.REDIRECT,
                 "return_url": self.return_url
             })
             builder.set_description(description)
             builder.set_metadata(metadata)
+            if save_payment_method:
+                # Ask YooKassa to save method for off-session charges
+                builder.set_save_payment_method(True)
+            if payment_method_id:
+                # Use a previously saved payment method for merchant-initiated payments
+                builder.set_payment_method_id(payment_method_id)
 
             receipt_items_list: List[Dict[str, Any]] = [{
                 "description":
@@ -178,7 +187,8 @@ class YooKassaService:
                 "description_from_yk":
                 response.description,
                 "test_mode":
-                response.test if hasattr(response, 'test') else None
+                response.test if hasattr(response, 'test') else None,
+                "payment_method": getattr(response, 'payment_method', None),
             }
         except Exception as e:
             logging.error(f"YooKassa payment creation failed: {e}",

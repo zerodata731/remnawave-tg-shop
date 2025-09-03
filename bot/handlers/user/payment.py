@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from yookassa.domain.notification import WebhookNotification
 from yookassa.domain.models.amount import Amount as YooKassaAmount
 
-from db.dal import payment_dal, user_dal
+from db.dal import payment_dal, user_dal, user_billing_dal
 
 from bot.services.subscription_service import SubscriptionService
 from bot.services.referral_service import ReferralService
@@ -89,6 +89,21 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
 
     try:
         yk_payment_id_from_hook = payment_info_from_webhook.get("id")
+        # Try to capture and save payment method for future charges if available
+        try:
+            payment_method = payment_info_from_webhook.get("payment_method")
+            if isinstance(payment_method, dict) and payment_method.get("saved", False):
+                pm_id = payment_method.get("id")
+                card = payment_method.get("card") or {}
+                await user_billing_dal.upsert_yk_payment_method(
+                    session,
+                    user_id=user_id,
+                    payment_method_id=pm_id,
+                    card_last4=card.get("last4"),
+                    card_network=card.get("card_type"),
+                )
+        except Exception:
+            logging.exception("Failed to persist YooKassa payment method from webhook")
         updated_payment_record = await payment_dal.update_payment_status_by_db_id(
             session,
             payment_db_id=payment_db_id,
@@ -329,6 +344,8 @@ async def yookassa_webhook_route(request: web.Request):
             "description":
             str(payment_data_from_notification.description)
             if payment_data_from_notification.description else None,
+            "payment_method": payment_data_from_notification.payment_method.to_dict()
+            if getattr(payment_data_from_notification, 'payment_method', None) else None,
         }
 
         async with payment_processing_lock:

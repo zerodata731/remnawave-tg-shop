@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from aiogram import Bot
 from bot.middlewares.i18n import JsonI18n
 
-from db.dal import user_dal, subscription_dal, promo_code_dal, payment_dal
+from db.dal import user_dal, subscription_dal, promo_code_dal, payment_dal, user_billing_dal
 from bot.utils.date_utils import add_months
 from db.models import User, Subscription
 
@@ -779,6 +779,58 @@ class SubscriptionService:
                     }
                 )
         return results
+
+    async def charge_subscription_renewal(
+        self,
+        session: AsyncSession,
+        sub: Subscription,
+    ) -> bool:
+        """Attempt to charge user using saved payment method. Return True on initiated/handled, False on failure."""
+        if not sub.auto_renew_enabled:
+            return True
+        if sub.provider == "tribute":
+            # Tribute is paid externally; we do not auto-charge here
+            return True
+
+        billing = await user_billing_dal.get_user_billing(session, sub.user_id)
+        if not billing or not billing.yookassa_payment_method_id:
+            logging.info(f"Auto-renew skipped: no saved payment method for user {sub.user_id}")
+            return False
+
+        try:
+            from .yookassa_service import YooKassaService  # local import to avoid cycles
+            yk: YooKassaService = self.yookassa_service  # type: ignore[attr-defined]
+        except Exception:
+            yk = None  # type: ignore
+        if not yk or not getattr(yk, 'configured', False):
+            logging.warning("YooKassa unavailable for auto-renew")
+            return False
+
+        months = sub.duration_months or 1
+        amount = self.settings.subscription_options.get(months)
+        if not amount:
+            logging.error(f"Auto-renew price missing for {months} months")
+            return False
+
+        metadata = {
+            "user_id": str(sub.user_id),
+            "auto_renew_for_subscription_id": str(sub.subscription_id),
+            "subscription_months": str(months),
+        }
+        resp = await yk.create_payment(
+            amount=float(amount),
+            currency="RUB",
+            description=f"Auto-renewal for {months} months",
+            metadata=metadata,
+            payment_method_id=billing.yookassa_payment_method_id,
+            save_payment_method=False,
+            capture=True,
+        )
+        if not resp or resp.get("status") not in {"pending", "waiting_for_capture", "succeeded"}:
+            logging.error(f"Auto-renew create_payment failed: {resp}")
+            return False
+        logging.info(f"Auto-renew initiated for user {sub.user_id} payment_id={resp.get('id')}")
+        return True
 
     async def update_last_notification_sent(
         self, session: AsyncSession, user_id: int, subscription_end_date: datetime

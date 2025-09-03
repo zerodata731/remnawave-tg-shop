@@ -53,6 +53,11 @@ async def update_subscription(
     return sub
 
 
+async def set_auto_renew(session: AsyncSession, subscription_id: int, enabled: bool) -> Optional[Subscription]:
+    """Toggle auto_renew_enabled for a subscription."""
+    return await update_subscription(session, subscription_id, {"auto_renew_enabled": enabled})
+
+
 async def set_user_subscriptions_cancelled_with_grace(
         session: AsyncSession, user_id: int, grace_days: int = 1) -> int:
     """Mark all active user subscriptions as cancelled with a short grace period.
