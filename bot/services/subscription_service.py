@@ -509,6 +509,7 @@ class SubscriptionService:
             "traffic_limit_bytes": self.settings.user_traffic_limit_bytes,
             "provider": provider,
             "skip_notifications": provider == "tribute" and self.settings.TRIBUTE_SKIP_NOTIFICATIONS,
+            "auto_renew_enabled": True,
         }
         try:
             new_or_updated_sub = await subscription_dal.upsert_subscription(

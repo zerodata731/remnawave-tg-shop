@@ -72,7 +72,7 @@ class Subscription(Base):
     last_notification_sent = Column(DateTime(timezone=True), nullable=True)
     provider = Column(String, nullable=True)
     skip_notifications = Column(Boolean, default=False)
-    auto_renew_enabled = Column(Boolean, default=False, index=True)
+    auto_renew_enabled = Column(Boolean, default=True, index=True)
 
     user = relationship("User", back_populates="subscriptions")
 
