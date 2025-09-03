@@ -20,6 +20,7 @@ from bot.services.panel_api_service import PanelApiService
 from bot.services.referral_service import ReferralService
 from bot.middlewares.i18n import JsonI18n
 from db.dal import subscription_dal
+from db.models import Subscription
 
 router = Router(name="user_subscription_router")
 
@@ -564,8 +565,7 @@ async def toggle_autorenew_handler(callback: types.CallbackQuery, settings: Sett
             pass
         return
 
-    sub = await session.get(type(subscription_service).__annotations__.get('sub', Subscription), sub_id)  # fallback avoids import cycle
-    # Better: direct DAL fetch
+    # Fetch subscription by ID directly
     sub = await session.get(Subscription, sub_id)
     if not sub or sub.user_id != callback.from_user.id:
         await callback.answer(get_text("error_try_again"), show_alert=True)
