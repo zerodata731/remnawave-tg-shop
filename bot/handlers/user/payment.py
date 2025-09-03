@@ -328,6 +328,33 @@ async def yookassa_webhook_route(request: web.Request):
             )
             return web.Response(status=200, text="ok_error_no_metadata")
 
+        # Safely extract payment_method details (SDK objects may not have to_dict)
+        pm_obj = getattr(payment_data_from_notification, 'payment_method', None)
+        pm_dict = None
+        if pm_obj is not None:
+            try:
+                card_obj = getattr(pm_obj, 'card', None)
+                pm_dict = {
+                    "id": getattr(pm_obj, 'id', None),
+                    "type": getattr(pm_obj, 'type', None),
+                    "saved": bool(getattr(pm_obj, 'saved', False)),
+                    "title": getattr(pm_obj, 'title', None),
+                    "card": (
+                        {
+                            "first6": getattr(card_obj, 'first6', None),
+                            "last4": getattr(card_obj, 'last4', None),
+                            "expiry_month": getattr(card_obj, 'expiry_month', None),
+                            "expiry_year": getattr(card_obj, 'expiry_year', None),
+                            "card_type": getattr(card_obj, 'card_type', None),
+                        }
+                        if card_obj is not None
+                        else None
+                    ),
+                }
+            except Exception:
+                logging.exception("Failed to serialize YooKassa payment_method from webhook")
+                pm_dict = None
+
         payment_dict_for_processing = {
             "id":
             str(payment_data_from_notification.id),
@@ -344,8 +371,7 @@ async def yookassa_webhook_route(request: web.Request):
             "description":
             str(payment_data_from_notification.description)
             if payment_data_from_notification.description else None,
-            "payment_method": payment_data_from_notification.payment_method.to_dict()
-            if getattr(payment_data_from_notification, 'payment_method', None) else None,
+            "payment_method": pm_dict,
         }
 
         async with payment_processing_lock:
