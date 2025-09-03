@@ -40,8 +40,13 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
     subscription_months_str = metadata.get("subscription_months")
     promo_code_id_str = metadata.get("promo_code_id")
     payment_db_id_str = metadata.get("payment_db_id")
+    auto_renew_subscription_id_str = metadata.get(
+        "auto_renew_for_subscription_id")
 
-    if not user_id_str or not subscription_months_str or not payment_db_id_str:
+    # For auto-renew payments, payment_db_id may be absent. In that case,
+    # we will create/ensure a payment record idempotently using provider payment id.
+    if (not user_id_str or not subscription_months_str
+            or (not payment_db_id_str and not auto_renew_subscription_id_str)):
         logging.error(
             f"Missing crucial metadata for payment: {payment_info_from_webhook.get('id')}, metadata: {metadata}"
         )
@@ -51,13 +56,52 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
     try:
         user_id = int(user_id_str)
         subscription_months = int(subscription_months_str)
-        payment_db_id = int(payment_db_id_str)
+        payment_db_id = int(
+            payment_db_id_str) if payment_db_id_str and payment_db_id_str.isdigit() else None
         promo_code_id = int(
             promo_code_id_str
         ) if promo_code_id_str and promo_code_id_str.isdigit() else None
 
         amount_data = payment_info_from_webhook.get("amount", {})
         payment_value = float(amount_data.get("value", 0.0))
+
+        # If this is an auto-renewal (no payment_db_id in metadata), ensure a payment record exists
+        if payment_db_id is None and auto_renew_subscription_id_str:
+            try:
+                # Create/ensure provider payment by YooKassa payment id for idempotency
+                yk_payment_id_from_hook = payment_info_from_webhook.get("id")
+                from db.dal import payment_dal as _payment_dal
+                ensured_payment = await _payment_dal.ensure_payment_with_provider_id(
+                    session,
+                    user_id=user_id,
+                    amount=payment_value,
+                    currency=amount_data.get("currency", settings.DEFAULT_CURRENCY_SYMBOL),
+                    months=subscription_months,
+                    description=payment_info_from_webhook.get(
+                        "description") or f"Auto-renewal for {subscription_months} months",
+                    provider="yookassa",
+                    provider_payment_id=yk_payment_id_from_hook,
+                )
+                payment_db_id = ensured_payment.payment_id
+                # Also persist yookassa_payment_id field if not set yet
+                try:
+                    await _payment_dal.update_payment_status_by_db_id(
+                        session,
+                        payment_db_id,
+                        payment_info_from_webhook.get("status", "succeeded"),
+                        yk_payment_id_from_hook,
+                    )
+                except Exception:
+                    # Non-fatal; continue processing
+                    logging.exception(
+                        "Failed to backfill yookassa_payment_id for ensured auto-renew payment"
+                    )
+            except Exception as e_ensure:
+                logging.error(
+                    f"Failed to ensure payment record for auto-renew webhook (YK {payment_info_from_webhook.get('id')}): {e_ensure}",
+                    exc_info=True,
+                )
+                return
 
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user:
