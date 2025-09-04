@@ -654,7 +654,8 @@ async def payment_method_delete_confirm(callback: types.CallbackQuery, settings:
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
-    pm_id = callback.data.split(":", 1)[-1] if ":" in callback.data else ""
+    parts = callback.data.split(":", 2)
+    pm_id = parts[2] if len(parts) >= 3 else ""
     await callback.message.edit_text(_("payment_method_delete_confirm"), reply_markup=get_payment_method_delete_confirm_keyboard(pm_id, current_lang, i18n))
     try:
         await callback.answer()
@@ -668,7 +669,8 @@ async def payment_method_delete(callback: types.CallbackQuery, settings: Setting
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
     # Try to parse specific method id for multi-card deletion
-    pm_id_raw = callback.data.split(":", 1)[-1] if ":" in callback.data else ""
+    parts = callback.data.split(":", 2)
+    pm_id_raw = parts[2] if len(parts) >= 3 else ""
     deleted = False
     # Attempt multi-card deletion first
     try:
@@ -737,7 +739,8 @@ async def payment_method_view(callback: types.CallbackQuery, settings: Settings,
         if not methods:
             await callback.answer(_("payment_method_none"), show_alert=True)
             return
-        pm_id = callback.data.split(":", 1)[-1] if ":" in callback.data else str(methods[0].method_id)
+        parts = callback.data.split(":", 2)
+        pm_id = parts[2] if len(parts) >= 3 else str(methods[0].method_id)
         # Map:
         sel = next((m for m in methods if str(m.method_id) == pm_id or m.provider_payment_method_id == pm_id), methods[0])
         title = _("payment_method_card_title", network=sel.card_network or "Card", last4=sel.card_last4 or "????")
