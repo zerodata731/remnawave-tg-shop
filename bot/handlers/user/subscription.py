@@ -926,17 +926,31 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
 
     # If viewing a specific saved payment method, filter history by that method when possible
     selected_pm_provider_id: Optional[str] = None
+    pm_filter_requested: bool = False
     try:
         split_a, split_b, split_pm_id = callback.data.split(":", 2)
         if split_pm_id:
-            # pm_id is our internal method_id; map to provider id
-            from db.dal.user_billing_dal import list_user_payment_methods
-            methods = await list_user_payment_methods(session, callback.from_user.id)
-            sel = next((m for m in methods if str(m.method_id) == split_pm_id), None)
-            if sel and sel.provider_payment_method_id:
-                selected_pm_provider_id = sel.provider_payment_method_id
+            pm_filter_requested = True
+            # Two possible formats:
+            #  - Internal method_id (digits)
+            #  - Direct provider payment_method.id (e.g., YooKassa 'pm_...')
+            if split_pm_id.isdigit():
+                # Map internal id to provider id
+                from db.dal.user_billing_dal import list_user_payment_methods
+                methods = await list_user_payment_methods(session, callback.from_user.id)
+                sel = next((m for m in methods if str(m.method_id) == split_pm_id), None)
+                if sel and sel.provider_payment_method_id:
+                    selected_pm_provider_id = sel.provider_payment_method_id
+            else:
+                # Assume it's already a provider payment_method.id
+                selected_pm_provider_id = split_pm_id
     except Exception:
         selected_pm_provider_id = None
+        pm_filter_requested = False
+
+    # If filter was explicitly requested but method can't be resolved (e.g., deleted), show empty history
+    if pm_filter_requested and not selected_pm_provider_id:
+        user_payments = []
 
     if selected_pm_provider_id:
         # Filter to rows we can confidently associate with the selected method
