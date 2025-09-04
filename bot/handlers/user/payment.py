@@ -151,7 +151,8 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
                     display_network = card.get("card_type") or title or "Card"
                     display_last4 = card.get("last4")
                 elif (pm_type or "").lower() in {"yoo_money", "yoomoney", "yoo-money", "wallet"}:
-                    display_network = title or "YooMoney"
+                    # Normalize wallet display name to avoid leaking full account from title
+                    display_network = "YooMoney"
                     if isinstance(account_number, str) and len(account_number) >= 4:
                         display_last4 = account_number[-4:]
                     else:
@@ -500,7 +501,8 @@ async def yookassa_webhook_route(request: web.Request):
                                             display_network = card.get("card_type") or title or "Card"
                                             display_last4 = card.get("last4")
                                         elif (pm_type or "").lower() in {"yoo_money", "yoomoney", "yoo-money", "wallet"}:
-                                            display_network = title or "YooMoney"
+                                            # Normalize wallet display name to avoid leaking full account from title
+                                            display_network = "YooMoney"
                                             if isinstance(account_number, str) and len(account_number) >= 4:
                                                 display_last4 = account_number[-4:]
                                             else:
