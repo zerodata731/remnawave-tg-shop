@@ -387,6 +387,8 @@
   "payment_method_card_title": "💳 {network} ••••{last4}",
   "payment_method_generic_title": "💳 {network}",
   "payment_method_wallet_title": "💼 YooMoney wallet ••••{last4}",
+  "payment_network_card": "Card",
+  "payment_network_generic": "Payment method",
   "payment_method_added_at": "Added: {date}",
   "payment_method_last_tx": "Last transaction: {date}",
   "payment_method_tx_history_title": "📜 Transactions history",

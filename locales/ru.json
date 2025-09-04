@@ -386,6 +386,8 @@
   "payment_method_card_title": "💳 {network} ••••{last4}",
   "payment_method_generic_title": "💳 {network}",
   "payment_method_wallet_title": "💼 Кошелёк YooMoney ••••{last4}",
+  "payment_network_card": "Карта",
+  "payment_network_generic": "Способ оплаты",
   "payment_method_added_at": "Добавлена: {date}",
   "payment_method_last_tx": "Последняя операция: {date}",
   "payment_method_tx_history_title": "📜 История операций",

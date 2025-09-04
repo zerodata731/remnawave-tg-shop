@@ -334,6 +334,20 @@ async def pay_yk_callback_handler(
                     card_last4=display_last4,
                     card_network=display_network,
                 )
+                # Also save multi-card entry and mark default if first
+                try:
+                    from db.dal import user_billing_dal as ub
+                    await ub.upsert_user_payment_method(
+                        session,
+                        user_id=user_id,
+                        provider_payment_method_id=pm['id'],
+                        provider="yookassa",
+                        card_last4=display_last4,
+                        card_network=display_network,
+                        set_default=True,
+                    )
+                except Exception:
+                    pass
                 await session.commit()
         except Exception:
             await session.rollback()
@@ -617,14 +631,25 @@ async def payment_methods_manage(callback: types.CallbackQuery, settings: Settin
     get_text = _
     methods = await list_user_payment_methods(session, callback.from_user.id)
     cards: List[tuple] = []
+    def _is_yoomoney_network(network: Optional[str]) -> bool:
+        s = (network or "").lower()
+        return "yoomoney" in s or "yoo money" in s or "yoo-money" in s
+    def _extract_last4(text: str) -> Optional[str]:
+        digits = "".join(ch for ch in text if ch.isdigit())
+        return digits[-4:] if len(digits) >= 4 else None
+    def _format_pm_title(network: Optional[str], last4: Optional[str]) -> str:
+        if _is_yoomoney_network(network):
+            l4 = last4 or _extract_last4(network or "")
+            if l4:
+                return get_text("payment_method_wallet_title", last4=l4)
+            return get_text("payment_method_wallet_title", last4="****")
+        if last4:
+            network_name = network or get_text("payment_network_card", default="Card")
+            return get_text("payment_method_card_title", network=network_name, last4=last4)
+        network_name = network or get_text("payment_network_generic", default="Payment method")
+        return get_text("payment_method_generic_title", network=network_name)
     for m in methods:
-        if m.card_last4:
-            if (m.card_network or '').lower() in {"yoomoney", "yoo money", "yoo-money", "yoomoney wallet", "yoomoney кошелек", "yoomoney кошелёк"} or (m.card_network or '') == "YooMoney":
-                title = get_text("payment_method_wallet_title", last4=m.card_last4)
-            else:
-                title = get_text("payment_method_card_title", network=m.card_network or "Card", last4=m.card_last4)
-        else:
-            title = get_text("payment_method_generic_title", network=m.card_network or "Payment method")
+        title = _format_pm_title(m.card_network, m.card_last4)
         cards.append((str(m.method_id), title if not m.is_default else f"⭐ {title}"))
 
     text = get_text("payment_methods_title")
@@ -703,13 +728,24 @@ async def payment_method_delete(callback: types.CallbackQuery, settings: Setting
             text = _("payment_methods_title")
             cards = []
             for m in methods:
-                if m.card_last4:
-                    if (m.card_network or '').lower() in {"yoomoney", "yoo money", "yoo-money", "yoomoney wallet", "yoomoney кошелек", "yoomoney кошелёк"} or (m.card_network or '') == "YooMoney":
-                        title = _("payment_method_wallet_title", last4=m.card_last4)
-                    else:
-                        title = _("payment_method_card_title", network=m.card_network or "Card", last4=m.card_last4)
-                else:
-                    title = _("payment_method_generic_title", network=m.card_network or "Payment method")
+                def _is_yoomoney_network(network: Optional[str]) -> bool:
+                    s = (network or "").lower()
+                    return "yoomoney" in s or "yoo money" in s or "yoo-money" in s
+                def _extract_last4(text: str) -> Optional[str]:
+                    digits = "".join(ch for ch in text if ch.isdigit())
+                    return digits[-4:] if len(digits) >= 4 else None
+                def _format_pm_title(network: Optional[str], last4: Optional[str]) -> str:
+                    if _is_yoomoney_network(network):
+                        l4 = last4 or _extract_last4(network or "")
+                        if l4:
+                            return _("payment_method_wallet_title", last4=l4)
+                        return _("payment_method_wallet_title", last4="****")
+                    if last4:
+                        network_name = network or _("payment_network_card", default="Card")
+                        return _("payment_method_card_title", network=network_name, last4=last4)
+                    network_name = network or _("payment_network_generic", default="Payment method")
+                    return _("payment_method_generic_title", network=network_name)
+                title = _format_pm_title(m.card_network, m.card_last4)
                 cards.append((str(m.method_id), title if not m.is_default else f"⭐ {title}"))
             if not cards:
                 text += "\n\n" + _("payment_method_none")
@@ -739,13 +775,24 @@ async def payment_method_delete(callback: types.CallbackQuery, settings: Setting
     methods = await list_user_payment_methods(session, callback.from_user.id)
     cards = []
     for m in methods:
-        if m.card_last4:
-            if (m.card_network or '').lower() in {"yoomoney", "yoo money", "yoo-money", "yoomoney wallet", "yoomoney кошелек", "yoomoney кошелёк"} or (m.card_network or '') == "YooMoney":
-                title = _("payment_method_wallet_title", last4=m.card_last4)
-            else:
-                title = _("payment_method_card_title", network=m.card_network or "Card", last4=m.card_last4)
-        else:
-            title = _("payment_method_generic_title", network=m.card_network or "Payment method")
+        def _is_yoomoney_network(network: Optional[str]) -> bool:
+            s = (network or "").lower()
+            return "yoomoney" in s or "yoo money" in s or "yoo-money" in s
+        def _extract_last4(text: str) -> Optional[str]:
+            digits = "".join(ch for ch in text if ch.isdigit())
+            return digits[-4:] if len(digits) >= 4 else None
+        def _format_pm_title(network: Optional[str], last4: Optional[str]) -> str:
+            if _is_yoomoney_network(network):
+                l4 = last4 or _extract_last4(network or "")
+                if l4:
+                    return _("payment_method_wallet_title", last4=l4)
+                return _("payment_method_wallet_title", last4="****")
+            if last4:
+                network_name = network or _("payment_network_card", default="Card")
+                return _("payment_method_card_title", network=network_name, last4=last4)
+            network_name = network or _("payment_network_generic", default="Payment method")
+            return _("payment_method_generic_title", network=network_name)
+        title = _format_pm_title(m.card_network, m.card_last4)
         cards.append((str(m.method_id), title if not m.is_default else f"⭐ {title}"))
     text = _("payment_methods_title")
     if not cards:
@@ -775,13 +822,24 @@ async def payment_method_view(callback: types.CallbackQuery, settings: Settings,
         pm_id = parts[2] if len(parts) >= 3 else str(methods[0].method_id)
         # Map:
         sel = next((m for m in methods if str(m.method_id) == pm_id or m.provider_payment_method_id == pm_id), methods[0])
-        if sel.card_last4:
-            if (sel.card_network or '').lower() in {"yoomoney", "yoo money", "yoo-money", "yoomoney wallet", "yoomoney кошелек", "yoomoney кошелёк"} or (sel.card_network or '') == "YooMoney":
-                title = _("payment_method_wallet_title", last4=sel.card_last4)
-            else:
-                title = _("payment_method_card_title", network=sel.card_network or "Card", last4=sel.card_last4)
-        else:
-            title = _("payment_method_generic_title", network=sel.card_network or "Payment method")
+        def _is_yoomoney_network(network: Optional[str]) -> bool:
+            s = (network or "").lower()
+            return "yoomoney" in s or "yoo money" in s or "yoo-money" in s
+        def _extract_last4(text: str) -> Optional[str]:
+            digits = "".join(ch for ch in text if ch.isdigit())
+            return digits[-4:] if len(digits) >= 4 else None
+        def _format_pm_title(network: Optional[str], last4: Optional[str]) -> str:
+            if _is_yoomoney_network(network):
+                l4 = last4 or _extract_last4(network or "")
+                if l4:
+                    return _("payment_method_wallet_title", last4=l4)
+                return _("payment_method_wallet_title", last4="****")
+            if last4:
+                network_name = network or _("payment_network_card", default="Card")
+                return _("payment_method_card_title", network=network_name, last4=last4)
+            network_name = network or _("payment_network_generic", default="Payment method")
+            return _("payment_method_generic_title", network=network_name)
+        title = _format_pm_title(sel.card_network, sel.card_last4)
         added_at = sel.created_at.strftime('%Y-%m-%d') if getattr(sel, 'created_at', None) else "—"
         # Last tx
         last_tx = "—"
@@ -829,13 +887,24 @@ async def payment_method_view(callback: types.CallbackQuery, settings: Settings,
             last_tx = last_payment.created_at.strftime('%Y-%m-%d')
     except Exception:
         pass
-    if billing.card_last4:
-        if (billing.card_network or '').lower() in {"yoomoney", "yoo money", "yoo-money", "yoomoney wallet", "yoomoney кошелек", "yoomoney кошелёк"} or (billing.card_network or '') == "YooMoney":
-            title = _("payment_method_wallet_title", last4=billing.card_last4)
-        else:
-            title = _("payment_method_card_title", network=billing.card_network or "Card", last4=billing.card_last4)
-    else:
-        title = _("payment_method_generic_title", network=billing.card_network or "Payment method")
+    def _is_yoomoney_network(network: Optional[str]) -> bool:
+        s = (network or "").lower()
+        return "yoomoney" in s or "yoo money" in s or "yoo-money" in s
+    def _extract_last4(text: str) -> Optional[str]:
+        digits = "".join(ch for ch in text if ch.isdigit())
+        return digits[-4:] if len(digits) >= 4 else None
+    def _format_pm_title(network: Optional[str], last4: Optional[str]) -> str:
+        if _is_yoomoney_network(network):
+            l4 = last4 or _extract_last4(network or "")
+            if l4:
+                return _("payment_method_wallet_title", last4=l4)
+            return _("payment_method_wallet_title", last4="****")
+        if last4:
+            network_name = network or _("payment_network_card", default="Card")
+            return _("payment_method_card_title", network=network_name, last4=last4)
+        network_name = network or _("payment_network_generic", default="Payment method")
+        return _("payment_method_generic_title", network=network_name)
+    title = _format_pm_title(billing.card_network, billing.card_last4)
     details = f"{title}\n{_('payment_method_added_at', date=added_at)}\n{_('payment_method_last_tx', date=last_tx)}"
     await callback.message.edit_text(details, reply_markup=get_payment_method_details_keyboard(billing.yookassa_payment_method_id, current_lang, i18n))
     try:
@@ -891,13 +960,24 @@ async def payment_methods_list(callback: types.CallbackQuery, settings: Settings
     cards: List[tuple] = []
     methods = await list_user_payment_methods(session, callback.from_user.id)
     for m in methods:
-        if m.card_last4:
-            if (m.card_network or '').lower() in {"yoomoney", "yoo money", "yoo-money", "yoomoney wallet", "yoomoney кошелек", "yoomoney кошелёк"} or (m.card_network or '') == "YooMoney":
-                title = get_text("payment_method_wallet_title", last4=m.card_last4)
-            else:
-                title = get_text("payment_method_card_title", network=m.card_network or "Card", last4=m.card_last4)
-        else:
-            title = get_text("payment_method_generic_title", network=m.card_network or "Payment method")
+        def _is_yoomoney_network(network: Optional[str]) -> bool:
+            s = (network or "").lower()
+            return "yoomoney" in s or "yoo money" in s or "yoo-money" in s
+        def _extract_last4(text: str) -> Optional[str]:
+            digits = "".join(ch for ch in text if ch.isdigit())
+            return digits[-4:] if len(digits) >= 4 else None
+        def _format_pm_title(network: Optional[str], last4: Optional[str]) -> str:
+            if _is_yoomoney_network(network):
+                l4 = last4 or _extract_last4(network or "")
+                if l4:
+                    return get_text("payment_method_wallet_title", last4=l4)
+                return get_text("payment_method_wallet_title", last4="****")
+            if last4:
+                network_name = network or get_text("payment_network_card", default="Card")
+                return get_text("payment_method_card_title", network=network_name, last4=last4)
+            network_name = network or get_text("payment_network_generic", default="Payment method")
+            return get_text("payment_method_generic_title", network=network_name)
+        title = _format_pm_title(m.card_network, m.card_last4)
         cards.append((str(m.method_id), title if not m.is_default else f"⭐ {title}"))
 
     # Parse page
