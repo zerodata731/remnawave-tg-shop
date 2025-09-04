@@ -793,8 +793,9 @@ class SubscriptionService:
             # Tribute is paid externally; we do not auto-charge here
             return True
 
-        billing = await user_billing_dal.get_user_billing(session, sub.user_id)
-        if not billing or not billing.yookassa_payment_method_id:
+        from db.dal.user_billing_dal import get_user_default_payment_method
+        default_pm = await get_user_default_payment_method(session, sub.user_id)
+        if not default_pm:
             logging.info(f"Auto-renew skipped: no saved payment method for user {sub.user_id}")
             return False
 
@@ -823,7 +824,7 @@ class SubscriptionService:
             currency="RUB",
             description=f"Auto-renewal for {months} months",
             metadata=metadata,
-            payment_method_id=billing.yookassa_payment_method_id,
+            payment_method_id=default_pm.provider_payment_method_id,
             save_payment_method=False,
             capture=True,
         )

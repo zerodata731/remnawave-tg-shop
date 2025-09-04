@@ -471,6 +471,37 @@ async def yookassa_webhook_route(request: web.Request):
                                             card_network=card.get("card_type"),
                                         )
                                         await session.commit()
+                                        # Save multi-card entry and mark default if first
+                                        try:
+                                            from db.dal import user_billing_dal as ub
+                                            await ub.upsert_user_payment_method(
+                                                session,
+                                                user_id=user_id,
+                                                provider_payment_method_id=payment_method.get("id"),
+                                                provider="yookassa",
+                                                card_last4=card.get("last4"),
+                                                card_network=card.get("card_type"),
+                                                set_default=True,
+                                            )
+                                            await session.commit()
+                                        except Exception:
+                                            await session.rollback()
+                                        # Notify user about successful binding with Back button
+                                        try:
+                                            i18n_lang = settings.DEFAULT_LANGUAGE
+                                            from db.dal import user_dal
+                                            db_user = await user_dal.get_user_by_id(session, user_id)
+                                            if db_user and db_user.language_code:
+                                                i18n_lang = db_user.language_code
+                                            _ = lambda key, **kwargs: i18n_instance.gettext(i18n_lang, key, **kwargs)
+                                            from bot.keyboards.inline.user_keyboards import get_back_to_payment_methods_keyboard
+                                            await bot.send_message(
+                                                chat_id=user_id,
+                                                text=_("payment_method_bound_success"),
+                                                reply_markup=get_back_to_payment_methods_keyboard(i18n_lang, i18n_instance)
+                                            )
+                                        except Exception:
+                                            pass
                                         # Attempt to cancel the authorization to avoid charge hold
                                         try:
                                             yk: YooKassaService = request.app.get('yookassa_service')

@@ -126,6 +126,24 @@ class UserBilling(Base):
 
     user = relationship("User")
 
+class UserPaymentMethod(Base):
+    __tablename__ = "user_payment_methods"
+
+    method_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
+    provider = Column(String, nullable=False, default="yookassa", index=True)
+    provider_payment_method_id = Column(String, nullable=False, unique=True, index=True)
+    card_last4 = Column(String, nullable=True)
+    card_network = Column(String, nullable=True)
+    is_default = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
+    user = relationship("User")
+    __table_args__ = (
+        UniqueConstraint('user_id', 'provider_payment_method_id', name='uq_user_provider_method'),
+    )
+
 class PromoCode(Base):
     __tablename__ = "promo_codes"
 
