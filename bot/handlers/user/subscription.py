@@ -914,15 +914,52 @@ async def payment_method_view(callback: types.CallbackQuery, settings: Settings,
 
 
 @router.callback_query(F.data.startswith("pm:history"))
-async def payment_method_history(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
+async def payment_method_history(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession, yookassa_service: YooKassaService):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     # Simple history from payments table filtered by user
     from db.dal import payment_dal
-    payments = await payment_dal.get_recent_payment_logs_with_user(session, limit=10, offset=0)
+    payments = await payment_dal.get_recent_payment_logs_with_user(session, limit=30, offset=0)
     user_payments = [p for p in payments if p.user_id == callback.from_user.id]
+
+    # If viewing a specific saved payment method, filter history by that method when possible
+    selected_pm_provider_id: Optional[str] = None
+    try:
+        _, _, pm_id = callback.data.split(":", 2)
+        if pm_id:
+            # pm_id is our internal method_id; map to provider id
+            from db.dal.user_billing_dal import list_user_payment_methods
+            methods = await list_user_payment_methods(session, callback.from_user.id)
+            sel = next((m for m in methods if str(m.method_id) == pm_id), None)
+            if sel and sel.provider_payment_method_id:
+                selected_pm_provider_id = sel.provider_payment_method_id
+    except Exception:
+        selected_pm_provider_id = None
+
+    if selected_pm_provider_id:
+        # Filter to rows we can confidently associate with the selected method
+        # Heuristics:
+        # 1) Payments with yookassa_payment_id -> fetch payment info and compare payment_method.id
+        # 2) For auto-renew description, it always uses default saved method; keep those too
+        filtered: List[Payment] = []
+        for p in user_payments:
+            if p.provider != 'yookassa':
+                continue
+            if p.yookassa_payment_id and yookassa_service:
+                try:
+                    info = await yookassa_service.get_payment_info(p.yookassa_payment_id)
+                    pm = (info or {}).get("payment_method") or {}
+                    if pm.get("id") == selected_pm_provider_id:
+                        filtered.append(p)
+                        continue
+                except Exception:
+                    pass
+            # Fallback: auto-renew entries initiated via default method; include them
+            if (p.description or "").lower().startswith("auto-renewal"):
+                filtered.append(p)
+        user_payments = filtered
     if not user_payments:
         # Try to get pm_id from context to go one step back
         pm_id = ""
