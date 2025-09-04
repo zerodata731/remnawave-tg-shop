@@ -14,7 +14,7 @@ from bot.keyboards.inline.user_keyboards import (
     get_payment_url_keyboard, get_back_to_main_menu_markup,
     get_payment_methods_manage_keyboard, get_payment_method_delete_confirm_keyboard,
     get_payment_method_details_keyboard, get_bind_url_keyboard,
-    get_payment_methods_list_keyboard, get_back_to_payment_methods_keyboard)
+    get_payment_methods_list_keyboard, get_back_to_payment_methods_keyboard, get_back_to_payment_method_details_keyboard)
 from bot.services.yookassa_service import YooKassaService
 from db.dal import user_billing_dal
 from bot.services.stars_service import StarsService
@@ -763,7 +763,14 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
     payments = await payment_dal.get_recent_payment_logs_with_user(session, limit=10, offset=0)
     user_payments = [p for p in payments if p.user_id == callback.from_user.id]
     if not user_payments:
-        await callback.message.edit_text(_("payment_method_no_history"), reply_markup=get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True))
+        # Try to get pm_id from context to go one step back
+        pm_id = ""
+        try:
+            _, _, pm_id = callback.data.split(":", 2)
+        except Exception:
+            pm_id = ""
+        back_markup = get_back_to_payment_method_details_keyboard(pm_id, current_lang, i18n) if pm_id else get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True)
+        await callback.message.edit_text(_("payment_method_no_history"), reply_markup=back_markup)
         return
     # Show subscription purchase titles instead of raw provider/status
     def _format_item(p):
@@ -773,7 +780,12 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
 
     lines = [_format_item(p) for p in user_payments]
     text = _("payment_method_tx_history_title") + "\n\n" + "\n".join(lines)
-    await callback.message.edit_text(text, reply_markup=get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True))
+    try:
+        _, _, pm_id = callback.data.split(":", 2)
+    except Exception:
+        pm_id = ""
+    back_markup = get_back_to_payment_method_details_keyboard(pm_id, current_lang, i18n) if pm_id else get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True)
+    await callback.message.edit_text(text, reply_markup=back_markup)
 
 
 @router.callback_query(F.data.startswith("pm:list:"))

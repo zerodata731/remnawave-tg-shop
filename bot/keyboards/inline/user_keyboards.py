@@ -320,3 +320,11 @@ def get_back_to_payment_methods_keyboard(lang: str, i18n_instance) -> InlineKeyb
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text=_(key="back_to_main_menu_button"), callback_data="pm:list:0"))
     return builder.as_markup()
+
+
+def get_back_to_payment_method_details_keyboard(pm_id: str, lang: str, i18n_instance) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    # Back one step: return to specific payment method details
+    builder.row(InlineKeyboardButton(text=_(key="back_to_main_menu_button"), callback_data=f"pm:view:{pm_id}"))
+    return builder.as_markup()
