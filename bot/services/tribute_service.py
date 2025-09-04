@@ -209,6 +209,7 @@ class TributeService:
                     )
 
                     try:
+                        # Use user's DB language in success messages prepared above
                         await bot.send_message(
                             int(user_id),
                             success_msg,

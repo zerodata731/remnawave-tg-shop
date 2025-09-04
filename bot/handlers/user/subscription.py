@@ -2,7 +2,7 @@ import logging
 from aiogram import Router, F, types, Bot
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -774,14 +774,14 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
 async def payment_methods_list(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
-    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+    get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     # For now we only support single saved YK method; format as list API-ready
     from db.dal.user_billing_dal import list_user_payment_methods
     cards: List[tuple] = []
     methods = await list_user_payment_methods(session, callback.from_user.id)
     for m in methods:
-        title = _("payment_method_card_title", network=m.card_network or "Card", last4=m.card_last4 or "????")
+        title = get_text("payment_method_card_title", network=m.card_network or "Card", last4=m.card_last4 or "????")
         cards.append((str(m.method_id), title if not m.is_default else f"⭐ {title}"))
 
     # Parse page
@@ -791,9 +791,9 @@ async def payment_methods_list(callback: types.CallbackQuery, settings: Settings
     except Exception:
         page = 0
 
-    text = _("payment_methods_title")
+    text = get_text("payment_methods_title")
     if not cards:
-        text += "\n\n" + _("payment_method_none")
+        text += "\n\n" + get_text("payment_method_none")
     await callback.message.edit_text(text, reply_markup=get_payment_methods_list_keyboard(cards, page, current_lang, i18n))
     try:
         await callback.answer()

@@ -198,6 +198,7 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
             applied_referee_bonus_days_from_referral = referral_bonus_info.get(
                 "referee_bonus_applied_days")
 
+        # Use user's DB language for all user-facing messages
         user_lang = db_user.language_code if db_user and db_user.language_code else settings.DEFAULT_LANGUAGE
         _ = lambda key, **kwargs: i18n.gettext(user_lang, key, **kwargs)
 
@@ -488,6 +489,7 @@ async def yookassa_webhook_route(request: web.Request):
                                             await session.rollback()
                                         # Notify user about successful binding with Back button
                                         try:
+                                            # Use user's DB language for bind success notification
                                             i18n_lang = settings.DEFAULT_LANGUAGE
                                             from db.dal import user_dal
                                             db_user = await user_dal.get_user_by_id(session, user_id)

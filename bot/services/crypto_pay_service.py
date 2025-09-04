@@ -155,6 +155,7 @@ class CryptoPayService:
                 return
 
             db_user = await user_dal.get_user_by_id(session, user_id)
+            # Use DB language for user-facing messages
             lang = db_user.language_code if db_user and db_user.language_code else settings.DEFAULT_LANGUAGE
             _ = lambda k, **kw: i18n.gettext(lang, k, **kw)
 
