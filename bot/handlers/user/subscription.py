@@ -942,7 +942,6 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
         # Filter to rows we can confidently associate with the selected method
         # Heuristics:
         # 1) Payments with yookassa_payment_id -> fetch payment info and compare payment_method.id
-        # 2) For auto-renew description, it always uses default saved method; keep those too
         filtered: List[Payment] = []
         for p in user_payments:
             if p.provider != 'yookassa':
@@ -956,9 +955,6 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
                         continue
                 except Exception:
                     pass
-            # Fallback: auto-renew entries initiated via default method; include them
-            if (p.description or "").lower().startswith("auto-renewal"):
-                filtered.append(p)
         user_payments = filtered
     if not user_payments:
         # Try to get pm_id from context to go one step back
