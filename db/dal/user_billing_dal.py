@@ -140,3 +140,25 @@ async def delete_user_payment_method(session: AsyncSession, user_id: int, method
     await session.delete(method)
     await session.flush()
     return True
+
+
+async def delete_user_payment_method_by_provider_id(
+    session: AsyncSession,
+    user_id: int,
+    provider_payment_method_id: str,
+) -> bool:
+    """Delete a saved payment method by its provider payment_method.id for a specific user.
+
+    Useful when callbacks pass the provider id (e.g., YooKassa pm_...) instead of our internal method_id.
+    """
+    stmt = select(UserPaymentMethod).where(
+        UserPaymentMethod.user_id == user_id,
+        UserPaymentMethod.provider_payment_method_id == provider_payment_method_id,
+    )
+    result = await session.execute(stmt)
+    method: Optional[UserPaymentMethod] = result.scalar_one_or_none()
+    if not method:
+        return False
+    await session.delete(method)
+    await session.flush()
+    return True
