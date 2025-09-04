@@ -140,13 +140,26 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
             payment_method = payment_info_from_webhook.get("payment_method")
             if isinstance(payment_method, dict) and payment_method.get("saved", False):
                 pm_id = payment_method.get("id")
+                pm_type = payment_method.get("type")
+                title = payment_method.get("title")
                 card = payment_method.get("card") or {}
+                display_network = None
+                display_last4 = None
+                # Build generic display for various instrument types
+                if (pm_type or "").lower() in {"bank_card", "bank-card", "card"}:
+                    display_network = card.get("card_type") or title or "Card"
+                    display_last4 = card.get("last4")
+                else:
+                    # Wallets, SBP, etc. — use provided title/type; no last4
+                    display_network = title or (pm_type.upper() if pm_type else "Payment method")
+                    display_last4 = None
+
                 await user_billing_dal.upsert_yk_payment_method(
                     session,
                     user_id=user_id,
                     payment_method_id=pm_id,
-                    card_last4=card.get("last4"),
-                    card_network=card.get("card_type"),
+                    card_last4=display_last4,
+                    card_network=display_network,
                 )
         except Exception:
             logging.exception("Failed to persist YooKassa payment method from webhook")
@@ -463,13 +476,23 @@ async def yookassa_webhook_route(request: web.Request):
                                     user_id = int(user_id_str)
                                     payment_method = payment_dict_for_processing.get("payment_method")
                                     if isinstance(payment_method, dict) and payment_method.get("id"):
+                                        pm_type = payment_method.get("type")
+                                        title = payment_method.get("title")
                                         card = payment_method.get("card") or {}
+                                        display_network = None
+                                        display_last4 = None
+                                        if (pm_type or "").lower() in {"bank_card", "bank-card", "card"}:
+                                            display_network = card.get("card_type") or title or "Card"
+                                            display_last4 = card.get("last4")
+                                        else:
+                                            display_network = title or (pm_type.upper() if pm_type else "Payment method")
+                                            display_last4 = None
                                         await user_billing_dal.upsert_yk_payment_method(
                                             session,
                                             user_id=user_id,
                                             payment_method_id=payment_method.get("id"),
-                                            card_last4=card.get("last4"),
-                                            card_network=card.get("card_type"),
+                                            card_last4=display_last4,
+                                            card_network=display_network,
                                         )
                                         await session.commit()
                                         # Save multi-card entry and mark default if first
@@ -480,8 +503,8 @@ async def yookassa_webhook_route(request: web.Request):
                                                 user_id=user_id,
                                                 provider_payment_method_id=payment_method.get("id"),
                                                 provider="yookassa",
-                                                card_last4=card.get("last4"),
-                                                card_network=card.get("card_type"),
+                                                card_last4=display_last4,
+                                                card_network=display_network,
                                                 set_default=True,
                                             )
                                             await session.commit()
