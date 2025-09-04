@@ -598,14 +598,20 @@ async def payment_methods_manage(callback: types.CallbackQuery, settings: Settin
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
-    # New list view relies on multi-card; but keep has_card for legacy text
-    billing = await user_billing_dal.get_user_billing(session, callback.from_user.id)
-    has_card = bool(billing and billing.yookassa_payment_method_id)
-    text = _("payment_methods_title")
-    if not has_card:
-        text += "\n\n" + _("payment_method_none")
-    # Redirect users to the new paginated list
-    await callback.message.edit_text(text, reply_markup=get_payment_methods_manage_keyboard(current_lang, i18n, has_card))
+    # Build and show the paginated list directly (page 0)
+    from db.dal.user_billing_dal import list_user_payment_methods
+    get_text = _
+    methods = await list_user_payment_methods(session, callback.from_user.id)
+    cards: List[tuple] = []
+    for m in methods:
+        title = get_text("payment_method_card_title", network=m.card_network or "Card", last4=m.card_last4 or "????")
+        cards.append((str(m.method_id), title if not m.is_default else f"⭐ {title}"))
+
+    text = get_text("payment_methods_title")
+    if not cards:
+        text += "\n\n" + get_text("payment_method_none")
+
+    await callback.message.edit_text(text, reply_markup=get_payment_methods_list_keyboard(cards, 0, current_lang, i18n))
     try:
         await callback.answer()
     except Exception:

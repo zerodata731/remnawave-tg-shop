@@ -235,10 +235,6 @@ def get_payment_methods_manage_keyboard(lang: str, i18n_instance, has_card: bool
     """Deprecated in favor of get_payment_methods_list_keyboard. Kept for backward compatibility."""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
-    # Route to the new list view
-    builder.row(
-        InlineKeyboardButton(text=_(key="payment_methods_title"), callback_data="pm:list:0")
-    )
     builder.row(
         InlineKeyboardButton(text=_(key="payment_method_bind_button"), callback_data="pm:bind")
     )
@@ -305,7 +301,7 @@ def get_payment_method_details_keyboard(pm_id: str, lang: str, i18n_instance) ->
         InlineKeyboardButton(text=_(key="payment_method_delete_button"), callback_data=f"pm:delete_confirm:{pm_id}")
     )
     builder.row(
-        InlineKeyboardButton(text=_(key="payment_methods_title"), callback_data="pm:list:0")
+        InlineKeyboardButton(text=_(key="back_to_main_menu_button"), callback_data="pm:list:0")
     )
     return builder.as_markup()
 
@@ -322,5 +318,5 @@ def get_bind_url_keyboard(bind_url: str, lang: str, i18n_instance) -> InlineKeyb
 def get_back_to_payment_methods_keyboard(lang: str, i18n_instance) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text=_(key="payment_methods_title"), callback_data="pm:list:0"))
+    builder.row(InlineKeyboardButton(text=_(key="back_to_main_menu_button"), callback_data="pm:list:0"))
     return builder.as_markup()
