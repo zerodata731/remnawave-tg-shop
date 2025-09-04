@@ -164,7 +164,8 @@ async def pay_yk_callback_handler(callback: types.CallbackQuery, settings: Setti
         description=payment_description,
         metadata=yookassa_metadata,
         receipt_email=receipt_email_for_yk,
-        save_payment_method=True,
+        # Save method only when autopayments are enabled
+        save_payment_method=bool(getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False)),
     )
 
     if payment_response_yk and payment_response_yk.get("confirmation_url"):

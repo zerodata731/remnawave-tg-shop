@@ -22,6 +22,13 @@ router = Router(name="user_subscription_payment_methods_router")
 async def payment_methods_manage(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
+        try:
+            _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+            await callback.answer(_("error_service_unavailable"), show_alert=True)
+        except Exception:
+            pass
+        return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     from db.dal.user_billing_dal import list_user_payment_methods
@@ -68,6 +75,13 @@ async def payment_methods_manage(callback: types.CallbackQuery, settings: Settin
 async def payment_method_bind(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession, yookassa_service: YooKassaService):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
+        try:
+            _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+            await callback.answer(_("error_service_unavailable"), show_alert=True)
+        except Exception:
+            pass
+        return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     metadata = {"user_id": str(callback.from_user.id), "bind_only": "1"}
@@ -95,6 +109,13 @@ async def payment_method_bind(callback: types.CallbackQuery, settings: Settings,
 async def payment_method_delete_confirm(callback: types.CallbackQuery, settings: Settings, i18n_data: dict):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
+        try:
+            _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+            await callback.answer(_("error_service_unavailable"), show_alert=True)
+        except Exception:
+            pass
+        return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
     parts = callback.data.split(":", 2)
     pm_id = parts[2] if len(parts) >= 3 else ""
@@ -109,6 +130,13 @@ async def payment_method_delete_confirm(callback: types.CallbackQuery, settings:
 async def payment_method_delete(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
+        try:
+            _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+            await callback.answer(_("error_service_unavailable"), show_alert=True)
+        except Exception:
+            pass
+        return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
     parts = callback.data.split(":", 2)
     pm_id_raw = parts[2] if len(parts) >= 3 else ""
@@ -176,6 +204,13 @@ async def payment_method_delete(callback: types.CallbackQuery, settings: Setting
 async def payment_method_view(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
+        try:
+            _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+            await callback.answer(_("error_service_unavailable"), show_alert=True)
+        except Exception:
+            pass
+        return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     billing = await user_billing_dal.get_user_billing(session, callback.from_user.id)
@@ -290,6 +325,13 @@ async def payment_method_view(callback: types.CallbackQuery, settings: Settings,
 async def payment_method_history(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession, yookassa_service: YooKassaService):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
+        try:
+            _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+            await callback.answer(_("error_service_unavailable"), show_alert=True)
+        except Exception:
+            pass
+        return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     from db.dal import payment_dal

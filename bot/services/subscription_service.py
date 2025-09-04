@@ -789,6 +789,9 @@ class SubscriptionService:
         """Attempt to charge user using saved payment method. Return True on initiated/handled, False on failure."""
         if not sub.auto_renew_enabled:
             return True
+        # If autopayments are disabled globally, skip charging attempts
+        if not getattr(self.settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
+            return True
         if sub.provider == "tribute":
             # Tribute is paid externally; we do not auto-charge here
             return True

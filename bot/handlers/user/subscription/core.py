@@ -151,7 +151,7 @@ async def my_subscription_command_handler(
     kb = base_markup.inline_keyboard
     try:
         local_sub = await subscription_dal.get_active_subscription_by_user_id(session, event.from_user.id)
-        if local_sub and local_sub.provider != "tribute":
+        if local_sub and local_sub.provider != "tribute" and getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
             toggle_text = (
                 get_text("autorenew_disable_button") if local_sub.auto_renew_enabled else get_text("autorenew_enable_button")
             )
@@ -163,7 +163,8 @@ async def my_subscription_command_handler(
                     )
                 ]
             ] + kb
-        kb = [[InlineKeyboardButton(text=get_text("payment_methods_manage_button"), callback_data="pm:manage")]] + kb
+        if getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
+            kb = [[InlineKeyboardButton(text=get_text("payment_methods_manage_button"), callback_data="pm:manage")]] + kb
     except Exception:
         pass
     markup = InlineKeyboardMarkup(inline_keyboard=kb)
