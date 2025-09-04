@@ -667,11 +667,56 @@ async def payment_method_delete(callback: types.CallbackQuery, settings: Setting
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
-    # Single-card storage: ignore pm_id for now but retain for future multi-card
-    deleted = await user_billing_dal.delete_yk_payment_method(session, callback.from_user.id)
-    await session.commit()
+    # Try to parse specific method id for multi-card deletion
+    pm_id_raw = callback.data.split(":", 1)[-1] if ":" in callback.data else ""
+    deleted = False
+    # Attempt multi-card deletion first
+    try:
+        if pm_id_raw and pm_id_raw.isdigit():
+            from db.dal.user_billing_dal import delete_user_payment_method, list_user_payment_methods
+            deleted = await delete_user_payment_method(session, callback.from_user.id, int(pm_id_raw))
+            await session.commit()
+            # Build updated list
+            methods = await list_user_payment_methods(session, callback.from_user.id)
+            text = _("payment_methods_title")
+            cards = []
+            for m in methods:
+                title = _("payment_method_card_title", network=m.card_network or "Card", last4=m.card_last4 or "????")
+                cards.append((str(m.method_id), title if not m.is_default else f"⭐ {title}"))
+            if not cards:
+                text += "\n\n" + _("payment_method_none")
+            msg = _("payment_method_deleted_success") if deleted else _("error_try_again")
+            # Prepend status message to title
+            await callback.message.edit_text(f"{msg}\n\n{text}", reply_markup=get_payment_methods_list_keyboard(cards, 0, current_lang, i18n))
+            try:
+                await callback.answer()
+            except Exception:
+                pass
+            return
+    except Exception:
+        await session.rollback()
+        deleted = False
+
+    # Fallback: legacy single-card storage deletion
+    try:
+        deleted = await user_billing_dal.delete_yk_payment_method(session, callback.from_user.id)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        deleted = False
+
     msg = _("payment_method_deleted_success") if deleted else _("error_try_again")
-    await callback.message.edit_text(msg, reply_markup=get_payment_methods_manage_keyboard(current_lang, i18n, has_card=False))
+    # After legacy deletion, route user to list (which will be empty) for consistency
+    from db.dal.user_billing_dal import list_user_payment_methods
+    methods = await list_user_payment_methods(session, callback.from_user.id)
+    cards = []
+    for m in methods:
+        title = _("payment_method_card_title", network=m.card_network or "Card", last4=m.card_last4 or "????")
+        cards.append((str(m.method_id), title if not m.is_default else f"⭐ {title}"))
+    text = _("payment_methods_title")
+    if not cards:
+        text += "\n\n" + _("payment_method_none")
+    await callback.message.edit_text(f"{msg}\n\n{text}", reply_markup=get_payment_methods_list_keyboard(cards, 0, current_lang, i18n))
     try:
         await callback.answer()
     except Exception:
