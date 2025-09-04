@@ -927,12 +927,12 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
     # If viewing a specific saved payment method, filter history by that method when possible
     selected_pm_provider_id: Optional[str] = None
     try:
-        _, _, pm_id = callback.data.split(":", 2)
-        if pm_id:
+        split_a, split_b, split_pm_id = callback.data.split(":", 2)
+        if split_pm_id:
             # pm_id is our internal method_id; map to provider id
             from db.dal.user_billing_dal import list_user_payment_methods
             methods = await list_user_payment_methods(session, callback.from_user.id)
-            sel = next((m for m in methods if str(m.method_id) == pm_id), None)
+            sel = next((m for m in methods if str(m.method_id) == split_pm_id), None)
             if sel and sel.provider_payment_method_id:
                 selected_pm_provider_id = sel.provider_payment_method_id
     except Exception:
@@ -962,12 +962,12 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
         user_payments = filtered
     if not user_payments:
         # Try to get pm_id from context to go one step back
-        pm_id = ""
+        back_pm_id = ""
         try:
-            _, _, pm_id = callback.data.split(":", 2)
+            split_a, split_b, back_pm_id = callback.data.split(":", 2)
         except Exception:
-            pm_id = ""
-        back_markup = get_back_to_payment_method_details_keyboard(pm_id, current_lang, i18n) if pm_id else get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True)
+            back_pm_id = ""
+        back_markup = get_back_to_payment_method_details_keyboard(back_pm_id, current_lang, i18n) if back_pm_id else get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True)
         await callback.message.edit_text(_("payment_method_no_history"), reply_markup=back_markup)
         return
     # Show subscription purchase titles instead of raw provider/status
@@ -979,10 +979,10 @@ async def payment_method_history(callback: types.CallbackQuery, settings: Settin
     lines = [_format_item(p) for p in user_payments]
     text = _("payment_method_tx_history_title") + "\n\n" + "\n".join(lines)
     try:
-        _, _, pm_id = callback.data.split(":", 2)
+        split_a, split_b, split_pm_id_for_back = callback.data.split(":", 2)
     except Exception:
-        pm_id = ""
-    back_markup = get_back_to_payment_method_details_keyboard(pm_id, current_lang, i18n) if pm_id else get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True)
+        split_pm_id_for_back = ""
+    back_markup = get_back_to_payment_method_details_keyboard(split_pm_id_for_back, current_lang, i18n) if split_pm_id_for_back else get_payment_methods_manage_keyboard(current_lang, i18n, has_card=True)
     await callback.message.edit_text(text, reply_markup=back_markup)
 
 
