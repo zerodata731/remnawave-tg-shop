@@ -27,6 +27,7 @@ payment_processing_lock = asyncio.Lock()
 
 YOOKASSA_EVENT_PAYMENT_SUCCEEDED = 'payment.succeeded'
 YOOKASSA_EVENT_PAYMENT_CANCELED = 'payment.canceled'
+YOOKASSA_EVENT_PAYMENT_WAITING_FOR_CAPTURE = 'payment.waiting_for_capture'
 
 
 async def process_successful_payment(session: AsyncSession, bot: Bot,
@@ -451,6 +452,34 @@ async def yookassa_webhook_route(request: web.Request):
                             session, bot, payment_dict_for_processing,
                             i18n_instance, settings)
                         await session.commit()
+                    elif notification_object.event == YOOKASSA_EVENT_PAYMENT_WAITING_FOR_CAPTURE:
+                        # Bind-only flow: save method and cancel auth if metadata has bind_only
+                        metadata = payment_dict_for_processing.get("metadata", {}) or {}
+                        if metadata.get("bind_only") == "1":
+                            try:
+                                user_id_str = metadata.get("user_id")
+                                if user_id_str and user_id_str.isdigit():
+                                    user_id = int(user_id_str)
+                                    payment_method = payment_dict_for_processing.get("payment_method")
+                                    if isinstance(payment_method, dict) and payment_method.get("id"):
+                                        card = payment_method.get("card") or {}
+                                        await user_billing_dal.upsert_yk_payment_method(
+                                            session,
+                                            user_id=user_id,
+                                            payment_method_id=payment_method.get("id"),
+                                            card_last4=card.get("last4"),
+                                            card_network=card.get("card_type"),
+                                        )
+                                        await session.commit()
+                                        # Attempt to cancel the authorization to avoid charge hold
+                                        try:
+                                            yk: YooKassaService = request.app.get('yookassa_service')
+                                            if yk:
+                                                await yk.cancel_payment(payment_dict_for_processing.get("id"))
+                                        except Exception:
+                                            logging.exception("Failed to cancel bind-only payment auth")
+                            except Exception:
+                                logging.exception("Failed to handle bind-only waiting_for_capture webhook")
                 except Exception as e_webhook_db_processing:
                     await session.rollback()
                     logging.error(

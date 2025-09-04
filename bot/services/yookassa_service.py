@@ -206,6 +206,19 @@ class YooKassaService:
             logging.error(
                 "YooKassa is not configured. Cannot get payment info.")
             return None
+
+    async def cancel_payment(self, payment_id_in_yookassa: str) -> bool:
+        if not self.configured:
+            logging.error("YooKassa is not configured. Cannot cancel payment.")
+            return False
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, lambda: YooKassaPayment.cancel(payment_id_in_yookassa))
+            logging.info(f"Cancelled YooKassa payment {payment_id_in_yookassa}")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to cancel YooKassa payment {payment_id_in_yookassa}: {e}")
+            return False
         try:
             logging.info(
                 f"Fetching payment info from YooKassa for ID: {payment_id_in_yookassa}"
