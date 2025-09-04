@@ -1,7 +1,7 @@
 import logging
 from aiogram import Router, F, types, Bot
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from typing import Optional, Union
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -151,20 +151,38 @@ async def my_subscription_command_handler(
     kb = base_markup.inline_keyboard
     try:
         local_sub = await subscription_dal.get_active_subscription_by_user_id(session, event.from_user.id)
+        # Build rows to prepend above the base "back" markup
+        prepend_rows = []
+
+        # 1) Mini-app connect button on top if enabled
+        if settings.SUBSCRIPTION_MINI_APP_URL:
+            prepend_rows.append([
+                InlineKeyboardButton(
+                    text=get_text("connect_button"),
+                    web_app=WebAppInfo(url=settings.SUBSCRIPTION_MINI_APP_URL),
+                )
+            ])
+
+        # 2) Auto-renew toggle (if supported and not tribute)
         if local_sub and local_sub.provider != "tribute" and getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
             toggle_text = (
                 get_text("autorenew_disable_button") if local_sub.auto_renew_enabled else get_text("autorenew_enable_button")
             )
-            kb = [
-                [
-                    InlineKeyboardButton(
-                        text=toggle_text,
-                        callback_data=f"toggle_autorenew:{local_sub.subscription_id}:{1 if not local_sub.auto_renew_enabled else 0}",
-                    )
-                ]
-            ] + kb
+            prepend_rows.append([
+                InlineKeyboardButton(
+                    text=toggle_text,
+                    callback_data=f"toggle_autorenew:{local_sub.subscription_id}:{1 if not local_sub.auto_renew_enabled else 0}",
+                )
+            ])
+
+        # 3) Payment methods management (when autopayments enabled)
         if getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):
-            kb = [[InlineKeyboardButton(text=get_text("payment_methods_manage_button"), callback_data="pm:manage")]] + kb
+            prepend_rows.append([
+                InlineKeyboardButton(text=get_text("payment_methods_manage_button"), callback_data="pm:manage")
+            ])
+
+        if prepend_rows:
+            kb = prepend_rows + kb
     except Exception:
         pass
     markup = InlineKeyboardMarkup(inline_keyboard=kb)
