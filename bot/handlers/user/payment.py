@@ -143,12 +143,19 @@ async def process_successful_payment(session: AsyncSession, bot: Bot,
                 pm_type = payment_method.get("type")
                 title = payment_method.get("title")
                 card = payment_method.get("card") or {}
+                account_number = payment_method.get("account_number") or payment_method.get("account")
                 display_network = None
                 display_last4 = None
                 # Build generic display for various instrument types
                 if (pm_type or "").lower() in {"bank_card", "bank-card", "card"}:
                     display_network = card.get("card_type") or title or "Card"
                     display_last4 = card.get("last4")
+                elif (pm_type or "").lower() in {"yoo_money", "yoomoney", "yoo-money", "wallet"}:
+                    display_network = title or "YooMoney"
+                    if isinstance(account_number, str) and len(account_number) >= 4:
+                        display_last4 = account_number[-4:]
+                    else:
+                        display_last4 = None
                 else:
                     # Wallets, SBP, etc. — use provided title/type; no last4
                     display_network = title or (pm_type.upper() if pm_type else "Payment method")
@@ -408,6 +415,13 @@ async def yookassa_webhook_route(request: web.Request):
                     "type": getattr(pm_obj, 'type', None),
                     "saved": bool(getattr(pm_obj, 'saved', False)),
                     "title": getattr(pm_obj, 'title', None),
+                    "account_number": (
+                        getattr(pm_obj, 'account_number', None)
+                        if hasattr(pm_obj, 'account_number') else (
+                            getattr(pm_obj, 'account', None)
+                            if hasattr(pm_obj, 'account') else None
+                        )
+                    ),
                     "card": (
                         {
                             "first6": getattr(card_obj, 'first6', None),
@@ -479,11 +493,18 @@ async def yookassa_webhook_route(request: web.Request):
                                         pm_type = payment_method.get("type")
                                         title = payment_method.get("title")
                                         card = payment_method.get("card") or {}
+                                        account_number = payment_method.get("account_number") or payment_method.get("account")
                                         display_network = None
                                         display_last4 = None
                                         if (pm_type or "").lower() in {"bank_card", "bank-card", "card"}:
                                             display_network = card.get("card_type") or title or "Card"
                                             display_last4 = card.get("last4")
+                                        elif (pm_type or "").lower() in {"yoo_money", "yoomoney", "yoo-money", "wallet"}:
+                                            display_network = title or "YooMoney"
+                                            if isinstance(account_number, str) and len(account_number) >= 4:
+                                                display_last4 = account_number[-4:]
+                                            else:
+                                                display_last4 = None
                                         else:
                                             display_network = title or (pm_type.upper() if pm_type else "Payment method")
                                             display_last4 = None

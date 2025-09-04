@@ -316,9 +316,13 @@ async def pay_yk_callback_handler(
                 pm_type = pm.get('type')
                 title = pm.get('title')
                 card = pm.get('card') or {}
+                account_number = pm.get('account_number') or pm.get('account')
                 if isinstance(card, dict) and (pm_type or '').lower() in {"bank_card", "bank-card", "card"}:
                     display_network = card.get('card_type') or title or 'Card'
                     display_last4 = card.get('last4')
+                elif (pm_type or '').lower() in {"yoo_money", "yoomoney", "yoo-money", "wallet"}:
+                    display_network = title or 'YooMoney'
+                    display_last4 = account_number[-4:] if isinstance(account_number, str) and len(account_number) >= 4 else None
                 else:
                     display_network = title or (pm_type.upper() if pm_type else 'Payment method')
                     display_last4 = None
