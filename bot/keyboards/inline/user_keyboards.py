@@ -320,3 +320,25 @@ def get_back_to_payment_method_details_keyboard(pm_id: str, lang: str, i18n_inst
     # Back one step: return to specific payment method details
     builder.row(InlineKeyboardButton(text=_(key="back_to_main_menu_button"), callback_data=f"pm:view:{pm_id}"))
     return builder.as_markup()
+
+
+def get_autorenew_cancel_keyboard(lang: str, i18n_instance) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text=_(key="autorenew_disable_button"), callback_data="autorenew:cancel")
+    )
+    builder.row(
+        InlineKeyboardButton(text=_(key="menu_my_subscription_inline"), callback_data="main_action:my_subscription")
+    )
+    return builder.as_markup()
+
+
+def get_autorenew_confirm_keyboard(enable: bool, sub_id: int, lang: str, i18n_instance) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text=_(key="yes_button"), callback_data=f"autorenew:confirm:{sub_id}:{1 if enable else 0}"),
+        InlineKeyboardButton(text=_(key="no_button"), callback_data="main_action:my_subscription"),
+    )
+    return builder.as_markup()

@@ -11,6 +11,7 @@ from config.settings import Settings
 from bot.keyboards.inline.user_keyboards import (
     get_subscription_options_keyboard,
     get_back_to_main_menu_markup,
+    get_autorenew_confirm_keyboard,
 )
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
@@ -223,6 +224,56 @@ async def toggle_autorenew_handler(
     try:
         _, payload = callback.data.split(":", 1)
         sub_id_str, enable_str = payload.split(":")
+        sub_id = int(sub_id_str)
+        enable = bool(int(enable_str))
+    except Exception:
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    sub = await session.get(Subscription, sub_id)
+    if not sub or sub.user_id != callback.from_user.id:
+        await callback.answer(get_text("error_try_again"), show_alert=True)
+        return
+    if sub.provider == "tribute":
+        await callback.answer(get_text("subscription_autorenew_not_supported_for_tribute"), show_alert=True)
+        return
+
+    # Show confirmation popup and inline buttons
+    confirm_text = get_text("autorenew_confirm_enable") if enable else get_text("autorenew_confirm_disable")
+    kb = get_autorenew_confirm_keyboard(enable, sub.subscription_id, current_lang, i18n)
+    try:
+        await callback.message.edit_text(confirm_text, reply_markup=kb)
+    except Exception:
+        try:
+            await callback.message.answer(confirm_text, reply_markup=kb)
+        except Exception:
+            pass
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+    return
+
+
+@router.callback_query(F.data.startswith("autorenew:confirm:"))
+async def confirm_autorenew_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    session: AsyncSession,
+    subscription_service: SubscriptionService,
+    panel_service: PanelApiService,
+    bot: Bot,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    try:
+        _, _, sub_id_str, enable_str = callback.data.split(":", 3)
         sub_id = int(sub_id_str)
         enable = bool(int(enable_str))
     except Exception:
