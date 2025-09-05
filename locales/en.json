@@ -406,5 +406,19 @@
   "error_creating_payment_record": "Error creating payment record. Please try again later.",
   "error_payment_gateway_link_failed": "Error creating payment link. Please try again later.",
   "status_active": "Active",
-  "status_inactive": "Inactive"
+  "status_inactive": "Inactive",
+  "admin_ads_section": "📈 Ads",
+  "admin_ads_header": "📈 Ad Campaigns:",
+  "admin_ads_empty": "📭 No ad campaigns. Click \"Create\" to add one.",
+  "admin_ads_item": "ID: {id}\nSource: <b>{source}</b>\nstart={start_param}\nCost: {cost} RUB\nActive: {active}\n— Starts: {starts}\n— Trials: {trials}\n— Payers: {payers}\n— Revenue: {revenue} RUB",
+  "admin_ads_create_button": "➕ Create campaign",
+  "admin_ads_create_source_prompt": "Enter source (e.g., AEZA, VK, TG-channel):",
+  "admin_ads_create_start_param_prompt": "Enter start link parameter (e.g., AEZA). Will be used as start=AEZA",
+  "admin_ads_create_cost_prompt": "Enter campaign cost (RUB):",
+  "admin_ads_invalid_source": "❌ Invalid source. Enter up to 64 characters.",
+  "admin_ads_invalid_start_param": "❌ Invalid parameter. Allowed letters/digits/underscore/dash (2-64).",
+  "admin_ads_invalid_cost": "❌ Invalid amount. Enter a non-negative number.",
+  "admin_ads_start_param_exists": "❌ A campaign with this start parameter already exists.",
+  "admin_ads_created_success": "✅ Campaign created!\nID: {id}\nSource: {source}\nParam: {start_param}\nCost: {cost} RUB",
+  "admin_ads_back_to_menu_hint": "Done. Back to Ads section:"
 }

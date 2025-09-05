@@ -227,3 +227,35 @@ class PanelSyncStatus(Base):
     subscriptions_synced = Column(Integer, default=0)
 
     __table_args__ = (UniqueConstraint('id'), )
+
+
+class AdCampaign(Base):
+    __tablename__ = "ad_campaigns"
+
+    ad_campaign_id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False, index=True)
+    start_param = Column(String, nullable=False, unique=True, index=True)
+    cost = Column(Float, nullable=False, default=0.0)
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    attributions = relationship(
+        "AdAttribution",
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+    )
+
+    def __repr__(self):
+        return f"<AdCampaign(id={self.ad_campaign_id}, source='{self.source}', start_param='{self.start_param}', cost={self.cost})>"
+
+
+class AdAttribution(Base):
+    __tablename__ = "ad_attributions"
+
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), primary_key=True, index=True)
+    ad_campaign_id = Column(Integer, ForeignKey("ad_campaigns.ad_campaign_id"), nullable=False, index=True)
+    first_start_at = Column(DateTime(timezone=True), server_default=func.now())
+    trial_activated_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")
+    campaign = relationship("AdCampaign", back_populates="attributions")

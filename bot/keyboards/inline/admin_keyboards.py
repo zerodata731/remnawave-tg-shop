@@ -25,6 +25,10 @@ def get_admin_panel_keyboard(i18n_instance, lang: str,
     builder.button(text=_(key="admin_promo_marketing_section"),
                    callback_data="admin_section:promo_marketing")
     
+    # Реклама
+    builder.button(text=_(key="admin_ads_section", default="📈 Реклама"),
+                   callback_data="admin_action:ads")
+
     # Системные функции
     builder.button(text=_(key="admin_system_functions_section"),
                    callback_data="admin_section:system_functions")
@@ -113,6 +117,17 @@ def get_system_functions_keyboard(i18n_instance, lang: str) -> InlineKeyboardMar
     builder.button(text=_(key="back_to_admin_panel_button"),
                    callback_data="admin_action:main")
     builder.adjust(2, 1, 1)
+    return builder.as_markup()
+
+
+def get_ads_menu_keyboard(i18n_instance, lang: str) -> InlineKeyboardMarkup:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    builder = InlineKeyboardBuilder()
+    builder.button(text=_(key="admin_ads_create_button", default="➕ Создать кампанию"),
+                   callback_data="admin_action:ads_create")
+    builder.button(text=_(key="back_to_admin_panel_button"),
+                   callback_data="admin_action:main")
+    builder.adjust(1, 1)
     return builder.as_markup()
 
 
