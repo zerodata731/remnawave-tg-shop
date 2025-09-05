@@ -148,30 +148,31 @@ def get_ads_list_keyboard(
             callback_data=f"admin_ads:card:{c.ad_campaign_id}:{current_page}",
         )
 
-    # Pagination row
-    row = []
-    if current_page > 0:
+    # Pagination row (only when needed)
+    if total_pages > 1:
+        row = []
+        if current_page > 0:
+            row.append(
+                InlineKeyboardButton(
+                    text="⬅️ " + _("prev_page_button", default="Prev"),
+                    callback_data=f"admin_ads:page:{current_page - 1}",
+                )
+            )
         row.append(
             InlineKeyboardButton(
-                text="⬅️ " + _("prev_page_button", default="Prev"),
-                callback_data=f"admin_ads:page:{current_page - 1}",
+                text=f"{current_page + 1}/{total_pages}",
+                callback_data="ads_page_display",
             )
         )
-    row.append(
-        InlineKeyboardButton(
-            text=f"{current_page + 1}/{total_pages}",
-            callback_data="ads_page_display",
-        )
-    )
-    if current_page < total_pages - 1:
-        row.append(
-            InlineKeyboardButton(
-                text=_("next_page_button", default="Next") + " ➡️",
-                callback_data=f"admin_ads:page:{current_page + 1}",
+        if current_page < total_pages - 1:
+            row.append(
+                InlineKeyboardButton(
+                    text=_("next_page_button", default="Next") + " ➡️",
+                    callback_data=f"admin_ads:page:{current_page + 1}",
+                )
             )
-        )
-    if row:
-        builder.row(*row)
+        if row:
+            builder.row(*row)
 
     builder.button(text=_(key="admin_ads_create_button", default="➕ Создать кампанию"),
                    callback_data="admin_action:ads_create")
