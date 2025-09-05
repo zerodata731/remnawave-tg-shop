@@ -1,5 +1,6 @@
 import logging
 from aiogram import Router, F, types
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config.settings import Settings
 from bot.middlewares.i18n import JsonI18n
 from db.dal import ad_dal
+from bot.states.admin_states import AdminStates
 
 router = Router(name="admin_ads_router")
 
@@ -76,9 +78,15 @@ async def ads_create_start(callback: types.CallbackQuery, state: FSMContext, set
         pass
 
 
-@router.message(F.text, state="*")
+@router.message(
+    StateFilter(
+        AdminStates.waiting_for_ad_source,
+        AdminStates.waiting_for_ad_start_param,
+        AdminStates.waiting_for_ad_cost,
+    ),
+    F.text,
+)
 async def ads_create_flow(message: types.Message, state: FSMContext, settings: Settings, i18n_data: dict, session: AsyncSession):
-    from bot.states.admin_states import AdminStates
     current_state = await state.get_state()
     if current_state not in (
         AdminStates.waiting_for_ad_source.state,
