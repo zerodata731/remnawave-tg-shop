@@ -300,6 +300,44 @@ async def confirm_autorenew_handler(
     await my_subscription_command_handler(callback, i18n_data, settings, panel_service, subscription_service, session, bot)
 
 
+@router.callback_query(F.data == "autorenew:cancel")
+async def autorenew_cancel_from_webhook_button(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    session: AsyncSession,
+    subscription_service: SubscriptionService,
+    panel_service: PanelApiService,
+    bot: Bot,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    # Disable auto-renew on the active subscription (non-tribute)
+    from db.dal import subscription_dal
+    sub = await subscription_dal.get_active_subscription_by_user_id(session, callback.from_user.id)
+    if not sub:
+        try:
+            await callback.answer(get_text("subscription_not_active"), show_alert=True)
+        except Exception:
+            pass
+        return
+    if sub.provider == "tribute":
+        try:
+            await callback.answer(get_text("subscription_autorenew_not_supported_for_tribute"), show_alert=True)
+        except Exception:
+            pass
+        return
+    await subscription_dal.update_subscription(session, sub.subscription_id, {"auto_renew_enabled": False})
+    await session.commit()
+    try:
+        await callback.answer(get_text("subscription_autorenew_updated"))
+    except Exception:
+        pass
+    await my_subscription_command_handler(callback, i18n_data, settings, panel_service, subscription_service, session, bot)
+
+
 @router.message(Command("connect"))
 async def connect_command_handler(
     message: types.Message,
