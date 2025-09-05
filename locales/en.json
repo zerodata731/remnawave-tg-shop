@@ -420,5 +420,8 @@
   "admin_ads_invalid_cost": "❌ Invalid amount. Enter a non-negative number.",
   "admin_ads_start_param_exists": "❌ A campaign with this start parameter already exists.",
   "admin_ads_created_success": "✅ Campaign created!\nID: {id}\nSource: {source}\nParam: {start_param}\nCost: {cost} RUB",
-  "admin_ads_back_to_menu_hint": "Done. Back to Ads section:"
+  "admin_ads_back_to_menu_hint": "Done. Back to Ads section:",
+  "admin_ads_overview": "📈 <b>Ads</b>\n💰 Revenue: <b>{revenue} RUB</b>\n💸 Spent: <b>{cost} RUB</b>",
+  "back_to_ads_list_button": "⬅️ Back to list",
+  "admin_ads_card": "📈 <b>Campaign #{id}</b>\nSource: <b>{source}</b>\nstart=<code>{start_param}</code>\nCost: <b>{cost} RUB</b>\nActive: {active}\n\n👥 Starts: <b>{starts}</b>\n🆓 Trials: <b>{trials}</b>\n💳 Payers: <b>{payers}</b>\n💵 Revenue: <b>{revenue} RUB</b>"
 }

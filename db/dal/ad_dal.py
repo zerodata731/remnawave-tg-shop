@@ -127,3 +127,38 @@ async def get_campaign_stats(session: AsyncSession, campaign_id: int) -> Dict[st
     }
 
 
+async def count_campaigns(session: AsyncSession, *, only_active: bool = False) -> int:
+    stmt = select(func.count(AdCampaign.ad_campaign_id))
+    if only_active:
+        stmt = stmt.where(AdCampaign.is_active == True)
+    return int((await session.execute(stmt)).scalar() or 0)
+
+
+async def list_campaigns_paged(
+    session: AsyncSession, *, page: int, page_size: int, only_active: bool = False
+) -> List[AdCampaign]:
+    offset = max(0, page) * max(1, page_size)
+    stmt = select(AdCampaign).order_by(AdCampaign.created_at.desc()).offset(offset).limit(page_size)
+    if only_active:
+        stmt = stmt.where(AdCampaign.is_active == True)
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+async def get_totals(session: AsyncSession) -> Dict[str, float]:
+    # Total cost across all campaigns
+    total_cost_stmt = select(func.coalesce(func.sum(AdCampaign.cost), 0.0))
+    total_cost = float((await session.execute(total_cost_stmt)).scalar() or 0.0)
+
+    # Total revenue from all attributed users (unique users counted across all campaigns)
+    revenue_stmt = select(func.coalesce(func.sum(Payment.amount), 0.0)).select_from(Payment).where(
+        and_(
+            Payment.status == "succeeded",
+            Payment.user_id.in_(select(AdAttribution.user_id)),
+        )
+    )
+    total_revenue = float((await session.execute(revenue_stmt)).scalar() or 0.0)
+
+    return {"cost": total_cost, "revenue": total_revenue}
+
+

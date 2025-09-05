@@ -13,6 +13,9 @@ from bot.states.admin_states import AdminStates
 router = Router(name="admin_ads_router")
 
 
+PAGE_SIZE = 5
+
+
 @router.callback_query(F.data == "admin_action:ads")
 async def show_ads_menu(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
@@ -23,40 +26,105 @@ async def show_ads_menu(callback: types.CallbackQuery, settings: Settings, i18n_
         await callback.answer("Language error.", show_alert=True)
         return
 
-    campaigns = await ad_dal.list_campaigns(session)
-    if not campaigns:
-        text = _("admin_ads_empty")
-    else:
-        text_lines = [_("admin_ads_header")]
-        for camp in campaigns:
-            try:
-                stats = await ad_dal.get_campaign_stats(session, camp.ad_campaign_id)
-            except Exception as e_stats:
-                logging.error(f"Failed to calc stats for campaign {camp.ad_campaign_id}: {e_stats}")
-                stats = {"starts": 0, "trials": 0, "payers": 0, "revenue": 0.0}
-            text_lines.append(
-                _(
-                    "admin_ads_item",
-                    id=camp.ad_campaign_id,
-                    source=camp.source,
-                    start_param=camp.start_param,
-                    cost=f"{camp.cost:.2f}",
-                    active=_("csv_yes") if camp.is_active else _("csv_no"),
-                    starts=stats["starts"],
-                    trials=stats["trials"],
-                    payers=stats["payers"],
-                    revenue=f"{stats['revenue']:.2f}",
-                )
-            )
-        text = "\n\n".join(text_lines)
+    totals = await ad_dal.get_totals(session)
+    total_cost = totals.get("cost", 0.0)
+    total_revenue = totals.get("revenue", 0.0)
+    overview = _("admin_ads_overview", revenue=f"{total_revenue:.2f}", cost=f"{total_cost:.2f}")
 
-    from bot.keyboards.inline.admin_keyboards import get_ads_menu_keyboard
-    reply_markup = get_ads_menu_keyboard(i18n, current_lang)
+    total_count = await ad_dal.count_campaigns(session)
+    if total_count == 0:
+        text = overview + "\n\n" + _("admin_ads_empty")
+        from bot.keyboards.inline.admin_keyboards import get_ads_menu_keyboard
+        reply_markup = get_ads_menu_keyboard(i18n, current_lang)
+    else:
+        current_page = 0
+        total_pages = max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE)
+        campaigns = await ad_dal.list_campaigns_paged(session, page=current_page, page_size=PAGE_SIZE)
+        text = overview + "\n\n" + _("admin_ads_header")
+        from bot.keyboards.inline.admin_keyboards import get_ads_list_keyboard
+        reply_markup = get_ads_list_keyboard(i18n, current_lang, campaigns, current_page, total_pages)
     await callback.message.edit_text(text, reply_markup=reply_markup)
     try:
         await callback.answer()
     except Exception:
         pass
+
+
+@router.callback_query(F.data.startswith("admin_ads:page:"))
+async def ads_list_pagination(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+    if not i18n or not callback.message:
+        await callback.answer("Language error.", show_alert=True)
+        return
+
+    try:
+        page = int(callback.data.split(":")[2])
+    except Exception:
+        page = 0
+
+    totals = await ad_dal.get_totals(session)
+    overview = _("admin_ads_overview", revenue=f"{totals.get('revenue', 0.0):.2f}", cost=f"{totals.get('cost', 0.0):.2f}")
+    total_count = await ad_dal.count_campaigns(session)
+    total_pages = max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+
+    campaigns = await ad_dal.list_campaigns_paged(session, page=page, page_size=PAGE_SIZE)
+    text = overview + "\n\n" + _("admin_ads_header")
+    from bot.keyboards.inline.admin_keyboards import get_ads_list_keyboard
+    reply_markup = get_ads_list_keyboard(i18n, current_lang, campaigns, page, total_pages)
+    try:
+        await callback.message.edit_text(text, reply_markup=reply_markup)
+        await callback.answer()
+    except Exception as e:
+        logging.error(f"Failed to paginate ads list: {e}")
+        await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_ads:card:"))
+async def show_ad_card(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+    if not i18n or not callback.message:
+        await callback.answer("Language error.", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    camp_id = int(parts[2])
+    back_page = int(parts[3]) if len(parts) > 3 else 0
+
+    camp = await ad_dal.get_campaign_by_id(session, camp_id)
+    if not camp:
+        await callback.answer(_("admin_promo_not_found"), show_alert=True)
+        return
+    try:
+        stats = await ad_dal.get_campaign_stats(session, camp_id)
+    except Exception:
+        stats = {"starts": 0, "trials": 0, "payers": 0, "revenue": 0.0}
+
+    text = _(
+        "admin_ads_card",
+        id=camp.ad_campaign_id,
+        source=camp.source,
+        start_param=camp.start_param,
+        cost=f"{camp.cost:.2f}",
+        active=_("csv_yes") if camp.is_active else _("csv_no"),
+        starts=stats["starts"],
+        trials=stats["trials"],
+        payers=stats["payers"],
+        revenue=f"{stats['revenue']:.2f}",
+    )
+
+    from bot.keyboards.inline.admin_keyboards import get_ad_card_keyboard
+    reply_markup = get_ad_card_keyboard(i18n, current_lang, camp.ad_campaign_id, back_page)
+    try:
+        await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
+        await callback.answer()
+    except Exception as e:
+        logging.error(f"Failed to show ad card: {e}")
+        await callback.answer()
 
 
 @router.callback_query(F.data == "admin_action:ads_create")
