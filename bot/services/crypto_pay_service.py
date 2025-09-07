@@ -67,18 +67,28 @@ class CryptoPayService:
             logging.error("CryptoPayService not configured")
             return None
 
-        payment_record = await payment_dal.create_payment_record(
-            session,
-            {
-                "user_id": user_id,
-                "amount": float(amount),
-                "currency": self.settings.CRYPTOPAY_ASSET,
-                "status": "pending_cryptopay",
-                "description": description,
-                "subscription_duration_months": months,
-                "provider": "cryptopay",
-            },
-        )
+        # Create pending payment in DB and commit to persist
+        try:
+            payment_record = await payment_dal.create_payment_record(
+                session,
+                {
+                    "user_id": user_id,
+                    "amount": float(amount),
+                    "currency": self.settings.CRYPTOPAY_ASSET,
+                    "status": "pending_cryptopay",
+                    "description": description,
+                    "subscription_duration_months": months,
+                    "provider": "cryptopay",
+                },
+            )
+            await session.commit()
+        except Exception as e_db_create:
+            await session.rollback()
+            logging.error(
+                f"Failed to create cryptopay payment record for user {user_id}: {e_db_create}",
+                exc_info=True,
+            )
+            return None
         payload = json.dumps({
             "user_id": str(user_id),
             "subscription_months": str(months),
@@ -93,12 +103,21 @@ class CryptoPayService:
                 description=description,
                 payload=payload,
             )
-            await payment_dal.update_provider_payment_and_status(
-                session,
-                payment_record.payment_id,
-                str(invoice.invoice_id),
-                str(invoice.status),
-            )
+            try:
+                await payment_dal.update_provider_payment_and_status(
+                    session,
+                    payment_record.payment_id,
+                    str(invoice.invoice_id),
+                    str(invoice.status),
+                )
+                await session.commit()
+            except Exception as e_db_update:
+                await session.rollback()
+                logging.error(
+                    f"Failed to update cryptopay payment record {payment_record.payment_id}: {e_db_update}",
+                    exc_info=True,
+                )
+                return None
             return invoice.bot_invoice_url
         except Exception as e:
             logging.error(f"CryptoPay invoice creation failed: {e}", exc_info=True)
@@ -155,6 +174,7 @@ class CryptoPayService:
                 return
 
             db_user = await user_dal.get_user_by_id(session, user_id)
+            # Use DB language for user-facing messages
             lang = db_user.language_code if db_user and db_user.language_code else settings.DEFAULT_LANGUAGE
             _ = lambda k, **kw: i18n.gettext(lang, k, **kw)
 

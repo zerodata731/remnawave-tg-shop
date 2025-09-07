@@ -109,8 +109,9 @@ class StarsService:
         if not final_end:
             final_end = activation_details["end_date"]
 
-        current_lang = i18n_data.get("current_language",
-                                     self.settings.DEFAULT_LANGUAGE)
+        # Always use user's language from DB for user-facing messages
+        db_user = await user_dal.get_user_by_id(session, message.from_user.id)
+        current_lang = db_user.language_code if db_user and db_user.language_code else self.settings.DEFAULT_LANGUAGE
         i18n: JsonI18n = i18n_data.get("i18n_instance")
         _ = lambda k, **kw: i18n.gettext(current_lang, k, **kw) if i18n else k
 
