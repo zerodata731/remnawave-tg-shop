@@ -90,6 +90,3 @@ venv/
 
 # VS Code
 .vscode/
-
-# We are passing locales with docker volume anyway
-locales/
