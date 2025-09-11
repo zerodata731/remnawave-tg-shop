@@ -428,5 +428,9 @@
   "admin_ads_back_to_menu_hint": "Done. Back to Ads section:",
   "admin_ads_overview": "📈 <b>Ads</b>\n💰 Revenue: <b>{revenue} RUB</b>\n💸 Spent: <b>{cost} RUB</b>",
   "back_to_ads_list_button": "⬅️ Back to list",
-  "admin_ads_card": "📈 <b>Campaign #{id}</b>\nSource: <b>{source}</b>\nstart=<code>{start_param}</code>\nCost: <b>{cost} RUB</b>\nActive: {active}\n\n👥 Starts: <b>{starts}</b>\n🆓 Trials: <b>{trials}</b>\n💳 Payers: <b>{payers}</b>\n💵 Revenue: <b>{revenue} RUB</b>"
+  "admin_ads_card": "📈 <b>Campaign #{id}</b>\nSource: <b>{source}</b>\nstart=<code>{start_param}</code>\nCost: <b>{cost} RUB</b>\nActive: {active}\n\n👥 Starts: <b>{starts}</b>\n🆓 Trials: <b>{trials}</b>\n💳 Payers: <b>{payers}</b>\n💵 Revenue: <b>{revenue} RUB</b>",
+  "admin_ads_delete_button": "🗑 Delete campaign",
+  "admin_ads_delete_confirm": "Are you sure you want to delete campaign #{id}? This action is irreversible.",
+  "admin_ads_deleted_success": "Campaign deleted.",
+  "admin_ads_not_found": "Campaign not found."
 }

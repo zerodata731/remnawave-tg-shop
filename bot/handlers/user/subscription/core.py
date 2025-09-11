@@ -155,7 +155,7 @@ async def my_subscription_command_handler(
         # Build rows to prepend above the base "back" markup
         prepend_rows = []
 
-        # 1) Mini-app connect button on top if enabled
+        # 1) Mini-app connect button on top if enabled, otherwise fall back to config link URL
         if settings.SUBSCRIPTION_MINI_APP_URL:
             prepend_rows.append([
                 InlineKeyboardButton(
@@ -163,6 +163,15 @@ async def my_subscription_command_handler(
                     web_app=WebAppInfo(url=settings.SUBSCRIPTION_MINI_APP_URL),
                 )
             ])
+        else:
+            cfg_link_val = (active or {}).get("config_link")
+            if cfg_link_val:
+                prepend_rows.append([
+                    InlineKeyboardButton(
+                        text=get_text("connect_button"),
+                        url=cfg_link_val,
+                    )
+                ])
 
         # 2) Auto-renew toggle (if supported and not tribute)
         if local_sub and local_sub.provider != "tribute" and getattr(settings, 'YOOKASSA_AUTOPAYMENTS_ENABLED', False):

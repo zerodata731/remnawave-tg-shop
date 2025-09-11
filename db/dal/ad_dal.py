@@ -162,3 +162,21 @@ async def get_totals(session: AsyncSession) -> Dict[str, float]:
     return {"cost": total_cost, "revenue": total_revenue}
 
 
+async def delete_campaign(session: AsyncSession, campaign_id: int) -> bool:
+    """Delete ad campaign by id along with related attributions.
+
+    Returns True if campaign existed and was deleted, False otherwise.
+    """
+    try:
+        campaign = await session.get(AdCampaign, campaign_id)
+        if not campaign:
+            return False
+        await session.delete(campaign)
+        await session.flush()
+        logging.info(f"AdCampaign deleted id={campaign_id}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to delete AdCampaign id={campaign_id}: {e}", exc_info=True)
+        raise
+
+

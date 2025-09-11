@@ -185,6 +185,9 @@ def get_ads_list_keyboard(
 def get_ad_card_keyboard(i18n_instance, lang: str, campaign_id: int, back_page: int) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
+    # Dangerous action: Delete campaign
+    builder.button(text=_(key="admin_ads_delete_button", default="🗑 Удалить кампанию"),
+                   callback_data=f"admin_ads:delete:{campaign_id}:{back_page}")
     builder.button(text=_(key="back_to_ads_list_button", default="⬅️ К списку"),
                    callback_data=f"admin_ads:page:{back_page}")
     builder.button(text=_(key="back_to_admin_panel_button"),
