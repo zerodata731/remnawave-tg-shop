@@ -30,8 +30,11 @@ class Settings(BaseSettings):
 
     YOOKASSA_DEFAULT_RECEIPT_EMAIL: Optional[str] = Field(default=None)
     YOOKASSA_VAT_CODE: int = Field(default=1)
+    # Deprecated: explicit receipt fields are now derived from YOOKASSA_AUTOPAYMENTS_ENABLED
     YOOKASSA_PAYMENT_MODE: str = Field(default="full_prepayment")
     YOOKASSA_PAYMENT_SUBJECT: str = Field(default="service")
+    # Single toggle to enable recurring payments (saving cards, managing payment methods, auto-renew)
+    YOOKASSA_AUTOPAYMENTS_ENABLED: bool = Field(default=False)
 
     WEBHOOK_BASE_URL: Optional[str] = None
 
@@ -232,6 +235,19 @@ class Settings(BaseSettings):
         if base:
             return f"{base.rstrip('/')}{self.cryptopay_webhook_path}"
         return None
+
+    # Computed YooKassa receipt fields based on recurring toggle
+    @computed_field
+    @property
+    def yk_receipt_payment_mode(self) -> str:
+        # If autopayments are enabled, use service; otherwise full prepayment
+        return "service" if self.YOOKASSA_AUTOPAYMENTS_ENABLED else "full_prepayment"
+
+    @computed_field
+    @property
+    def yk_receipt_payment_subject(self) -> str:
+        # If autopayments are enabled, use full_payment; otherwise payment
+        return "full_payment" if self.YOOKASSA_AUTOPAYMENTS_ENABLED else "payment"
 
     @computed_field
     @property

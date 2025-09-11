@@ -54,6 +54,15 @@ def build_core_services(
         settings_obj=settings,
     )
 
+    # Wire services that depend on each other
+    try:
+        # Attach YooKassa to subscription service for auto-renew charges
+        setattr(subscription_service, "yookassa_service", yookassa_service)
+        # Allow panel webhook to trigger renewals through subscription service
+        setattr(panel_webhook_service, "subscription_service", subscription_service)
+    except Exception:
+        pass
+
     return {
         "panel_service": panel_service,
         "subscription_service": subscription_service,
