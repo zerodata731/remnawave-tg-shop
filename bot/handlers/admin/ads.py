@@ -169,9 +169,9 @@ async def ads_delete_cancel(callback: types.CallbackQuery, settings: Settings, i
         return
 
     try:
-        _, _, _, camp_id_str, back_page_str = callback.data.split(":", 4)
-        camp_id = int(camp_id_str)
-        back_page = int(back_page_str)
+        parts = callback.data.split(":", 3)
+        camp_id = int(parts[2])
+        back_page = int(parts[3])
     except Exception:
         await callback.answer(_("error_try_again"), show_alert=True)
         return
@@ -215,9 +215,9 @@ async def ads_delete_confirm(callback: types.CallbackQuery, settings: Settings, 
         return
 
     try:
-        _, _, _, camp_id_str, back_page_str = callback.data.split(":", 4)
-        camp_id = int(camp_id_str)
-        back_page = int(back_page_str)
+        parts = callback.data.split(":", 3)
+        camp_id = int(parts[2])
+        back_page = int(parts[3])
     except Exception:
         await callback.answer(_("error_try_again"), show_alert=True)
         return
