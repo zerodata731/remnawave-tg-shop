@@ -131,7 +131,6 @@ async def show_ad_card(callback: types.CallbackQuery, settings: Settings, i18n_d
 async def ads_delete_prompt(callback: types.CallbackQuery, settings: Settings, i18n_data: dict):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
-    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
     if not i18n or not callback.message:
         await callback.answer("Language error.", show_alert=True)
         return
@@ -141,11 +140,11 @@ async def ads_delete_prompt(callback: types.CallbackQuery, settings: Settings, i
         camp_id = int(camp_id_str)
         back_page = int(back_page_str)
     except Exception:
-        await callback.answer(_("error_try_again"), show_alert=True)
+        await callback.answer(i18n.gettext(current_lang, "error_try_again"), show_alert=True)
         return
 
     from bot.keyboards.inline.admin_keyboards import get_confirmation_keyboard
-    confirm_text = _("admin_ads_delete_confirm", id=camp_id)
+    confirm_text = i18n.gettext(current_lang, "admin_ads_delete_confirm", id=camp_id)
     kb = get_confirmation_keyboard(
         yes_callback_data=f"admin_ads:delete_confirm:{camp_id}:{back_page}",
         no_callback_data=f"admin_ads:delete_cancel:{camp_id}:{back_page}",
