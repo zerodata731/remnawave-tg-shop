@@ -127,6 +127,126 @@ async def show_ad_card(callback: types.CallbackQuery, settings: Settings, i18n_d
         await callback.answer()
 
 
+@router.callback_query(F.data.startswith("admin_ads:delete:"))
+async def ads_delete_prompt(callback: types.CallbackQuery, settings: Settings, i18n_data: dict):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    if not i18n or not callback.message:
+        await callback.answer("Language error.", show_alert=True)
+        return
+
+    try:
+        _, _, camp_id_str, back_page_str = callback.data.split(":", 3)
+        camp_id = int(camp_id_str)
+        back_page = int(back_page_str)
+    except Exception:
+        await callback.answer(i18n.gettext(current_lang, "error_try_again"), show_alert=True)
+        return
+
+    from bot.keyboards.inline.admin_keyboards import get_confirmation_keyboard
+    confirm_text = i18n.gettext(current_lang, "admin_ads_delete_confirm", id=camp_id)
+    kb = get_confirmation_keyboard(
+        yes_callback_data=f"admin_ads:delete_confirm:{camp_id}:{back_page}",
+        no_callback_data=f"admin_ads:delete_cancel:{camp_id}:{back_page}",
+        i18n_instance=i18n,
+        lang=current_lang,
+    )
+    try:
+        await callback.message.edit_text(confirm_text, reply_markup=kb)
+        await callback.answer()
+    except Exception:
+        await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_ads:delete_cancel:"))
+async def ads_delete_cancel(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
+    # Return to the ad card view
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+    if not i18n or not callback.message:
+        await callback.answer("Language error.", show_alert=True)
+        return
+
+    try:
+        parts = callback.data.split(":", 3)
+        camp_id = int(parts[2])
+        back_page = int(parts[3])
+    except Exception:
+        await callback.answer(_("error_try_again"), show_alert=True)
+        return
+
+    camp = await ad_dal.get_campaign_by_id(session, camp_id)
+    if not camp:
+        await callback.answer(_("admin_ads_not_found", default="Кампания не найдена."), show_alert=True)
+        return
+    try:
+        stats = await ad_dal.get_campaign_stats(session, camp_id)
+    except Exception:
+        stats = {"starts": 0, "trials": 0, "payers": 0, "revenue": 0.0}
+    text = _(
+        "admin_ads_card",
+        id=camp.ad_campaign_id,
+        source=camp.source,
+        start_param=camp.start_param,
+        cost=f"{camp.cost:.2f}",
+        active=_("csv_yes") if camp.is_active else _("csv_no"),
+        starts=stats["starts"],
+        trials=stats["trials"],
+        payers=stats["payers"],
+        revenue=f"{stats['revenue']:.2f}",
+    )
+    from bot.keyboards.inline.admin_keyboards import get_ad_card_keyboard
+    reply_markup = get_ad_card_keyboard(i18n, current_lang, camp.ad_campaign_id, back_page)
+    try:
+        await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
+        await callback.answer()
+    except Exception:
+        await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_ads:delete_confirm:"))
+async def ads_delete_confirm(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+    if not i18n or not callback.message:
+        await callback.answer("Language error.", show_alert=True)
+        return
+
+    try:
+        parts = callback.data.split(":", 3)
+        camp_id = int(parts[2])
+        back_page = int(parts[3])
+    except Exception:
+        await callback.answer(_("error_try_again"), show_alert=True)
+        return
+
+    existed = await ad_dal.delete_campaign(session, camp_id)
+    if not existed:
+        await callback.answer(_("admin_ads_not_found", default="Кампания не найдена."), show_alert=True)
+        return
+    await session.commit()
+
+    # After delete, show list page (may shift due to fewer items)
+    totals = await ad_dal.get_totals(session)
+    overview = _(
+        "admin_ads_overview",
+        revenue=f"{totals.get('revenue', 0.0):.2f}",
+        cost=f"{totals.get('cost', 0.0):.2f}",
+    )
+    total_count = await ad_dal.count_campaigns(session)
+    total_pages = max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(0, min(back_page, total_pages - 1))
+    campaigns = await ad_dal.list_campaigns_paged(session, page=page, page_size=PAGE_SIZE)
+    text = overview + "\n\n" + _("admin_ads_header")
+    from bot.keyboards.inline.admin_keyboards import get_ads_list_keyboard
+    reply_markup = get_ads_list_keyboard(i18n, current_lang, campaigns, page, total_pages)
+    try:
+        await callback.message.edit_text(text, reply_markup=reply_markup)
+        await callback.answer(_("admin_ads_deleted_success"), show_alert=True)
+    except Exception:
+        await callback.answer(_("admin_ads_deleted_success"), show_alert=True)
 @router.callback_query(F.data == "admin_action:ads_create")
 async def ads_create_start(callback: types.CallbackQuery, state: FSMContext, settings: Settings, i18n_data: dict):
     from bot.states.admin_states import AdminStates
