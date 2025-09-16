@@ -15,6 +15,7 @@ from bot.states.admin_states import AdminStates
 from bot.keyboards.inline.admin_keyboards import get_back_to_admin_panel_keyboard
 from bot.services.subscription_service import SubscriptionService
 from bot.services.panel_api_service import PanelApiService
+from bot.services.referral_service import ReferralService
 from bot.middlewares.i18n import JsonI18n
 from bot.utils import get_message_content, send_direct_message
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
@@ -106,7 +107,8 @@ def get_user_card_keyboard(user_id: int, i18n_instance, lang: str) -> InlineKeyb
 
 async def format_user_card(user: User, session: AsyncSession, 
                           subscription_service: SubscriptionService,
-                          i18n_instance, lang: str) -> str:
+                          i18n_instance, lang: str,
+                          referral_service: Optional[ReferralService] = None) -> str:
     """Format user information as a detailed card"""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     
@@ -176,6 +178,17 @@ async def format_user_card(user: User, session: AsyncSession,
         had_subscriptions = await subscription_service.has_had_any_subscription(session, user.user_id)
         trial_status = _("admin_user_trial_used", default="Использовал") if had_subscriptions else _("admin_user_trial_not_used", default="Не использовал")
         card_parts.append(f"{_('admin_user_trial_label', default='🏡 <b>Триал:</b>')} {hcode(trial_status)}")
+
+        # Referral stats
+        if referral_service is not None:
+            try:
+                stats = await referral_service.get_referral_stats(session, user.user_id)
+                invited_count = stats.get('invited_count', 0)
+                purchased_count = stats.get('purchased_count', 0)
+                card_parts.append(f"{_('admin_user_invited_friends_label', default='👥 <b>Приглашено друзей:</b>')} {hcode(str(invited_count))}")
+                card_parts.append(f"{_('admin_user_ref_purchased_label', default='💳 <b>Купили подписку:</b>')} {hcode(str(purchased_count))}")
+            except Exception as e_rs:
+                logging.error(f"Failed to build referral stats for admin card {user.user_id}: {e_rs}")
         
     except Exception as e:
         logging.error(f"Error getting user statistics for {user.user_id}: {e}")
@@ -224,7 +237,8 @@ async def process_user_search_handler(message: types.Message, state: FSMContext,
 
     # Format and send user card
     try:
-        user_card_text = await format_user_card(user_model, session, subscription_service, i18n, current_lang)
+        referral_service = ReferralService(settings, subscription_service, message.bot, i18n)
+        user_card_text = await format_user_card(user_model, session, subscription_service, i18n, current_lang, referral_service)
         keyboard = get_user_card_keyboard(user_model.user_id, i18n, current_lang)
         
         await message.answer(
@@ -482,7 +496,10 @@ async def handle_refresh_user_card(callback: types.CallbackQuery, user: User,
             await callback.answer("User not found", show_alert=True)
             return
         
-        user_card_text = await format_user_card(fresh_user, session, subscription_service, i18n_instance, lang)
+        from config.settings import Settings as _Settings
+        _settings = _Settings()
+        referral_service = ReferralService(_settings, subscription_service, callback.message.bot, i18n_instance)
+        user_card_text = await format_user_card(fresh_user, session, subscription_service, i18n_instance, lang, referral_service)
         keyboard = get_user_card_keyboard(fresh_user.user_id, i18n_instance, lang)
         
         try:
@@ -556,7 +573,8 @@ async def process_subscription_days_handler(message: types.Message, state: FSMCo
             # Show updated user card
             user = await user_dal.get_user_by_id(session, target_user_id)
             if user:
-                user_card_text = await format_user_card(user, session, subscription_service, i18n, current_lang)
+                referral_service = ReferralService(settings, subscription_service, message.bot, i18n)
+                user_card_text = await format_user_card(user, session, subscription_service, i18n, current_lang, referral_service)
                 keyboard = get_user_card_keyboard(user.user_id, i18n, current_lang)
                 
                 await message.answer(
@@ -664,7 +682,8 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
         from bot.services.panel_api_service import PanelApiService
         async with PanelApiService(settings) as panel_service:
             subscription_service = SubscriptionService(settings, panel_service)
-            user_card_text = await format_user_card(target_user, session, subscription_service, i18n, current_lang)
+            referral_service = ReferralService(settings, subscription_service, bot, i18n)
+            user_card_text = await format_user_card(target_user, session, subscription_service, i18n, current_lang, referral_service)
             keyboard = get_user_card_keyboard(target_user.user_id, i18n, current_lang)
             
             await message.answer(
