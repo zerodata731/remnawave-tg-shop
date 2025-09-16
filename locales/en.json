@@ -228,6 +228,7 @@
   "admin_user_search_new_button": "🔍 Find Another",
   "admin_user_view_all_logs_button": "📋 All Actions",
   "admin_user_back_to_card_button": "🔙 Back to Card",
+  "admin_user_recent_actions_title": "📜 Recent actions of user {user_id}:",
   "admin_user_not_found": "❌ User not found: {input}",
   "admin_user_not_found_action": "User not found",
   "admin_user_card_error": "❌ Error displaying user card",

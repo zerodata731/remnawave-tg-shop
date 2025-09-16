@@ -227,6 +227,7 @@
   "admin_user_search_new_button": "🔍 Новый поиск",
   "admin_user_view_all_logs_button": "📋 Все логи",
   "admin_user_back_to_card_button": "🔙 К карточке",
+  "admin_user_recent_actions_title": "📜 Последние действия пользователя {user_id}:",
   "admin_user_not_found": "❌ Пользователь не найден: {input}",
   "admin_user_not_found_action": "Пользователь не найден",
   "admin_user_card_error": "❌ Ошибка отображения карточки пользователя",
