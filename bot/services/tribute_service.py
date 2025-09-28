@@ -250,8 +250,39 @@ class TributeService:
         from bot.keyboards.inline.user_keyboards import get_subscribe_only_markup
         
         try:
-            # Set all user's subscriptions to expire in 1 day (grace period)
-            await subscription_dal.set_user_subscriptions_cancelled_with_grace(session, user_id, grace_days=1)
+            grace_days = 1
+            grace_end = datetime.now(timezone.utc) + timedelta(days=grace_days)
+
+            active_subscriptions = await subscription_dal.get_active_subscriptions_for_user(session, user_id)
+
+            panel_users_updated: set[str] = set()
+            for sub in active_subscriptions:
+                updated_sub = await subscription_dal.update_subscription(
+                    session,
+                    sub.subscription_id,
+                    {
+                        "end_date": grace_end,
+                        "status_from_panel": "CANCELLED",
+                        "skip_notifications": True,
+                    },
+                )
+
+                panel_uuid = updated_sub.panel_user_uuid if updated_sub else None
+                if panel_uuid and panel_uuid not in panel_users_updated:
+                    panel_users_updated.add(panel_uuid)
+                    panel_payload = {
+                        "expireAt": grace_end.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+                    }
+                    try:
+                        await self.panel_service.update_user_details_on_panel(
+                            panel_uuid,
+                            panel_payload,
+                            log_response=False,
+                        )
+                    except Exception as panel_err:
+                        logging.error(
+                            f"Failed to update panel expiry for user {user_id} (panel_uuid {panel_uuid}) during Tribute cancellation: {panel_err}")
+
             await session.commit()
             
             # Send notification about cancellation if enabled
