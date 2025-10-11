@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     CRYPTOPAY_ASSET: str = Field(default="RUB")
     CRYPTOPAY_ENABLED: bool = Field(default=True)
 
+    FREEKASSA_ENABLED: bool = Field(default=False)
+    FREEKASSA_MERCHANT_ID: Optional[str] = None
+    FREEKASSA_FIRST_SECRET: Optional[str] = None
+    FREEKASSA_SECOND_SECRET: Optional[str] = None
+    FREEKASSA_PAYMENT_URL: str = Field(default="https://pay.freekassa.ru/")
+    FREEKASSA_CURRENCY: str = Field(default="RUB")
+
     YOOKASSA_ENABLED: bool = Field(default=True)
     STARS_ENABLED: bool = Field(default=True)
     TRIBUTE_ENABLED: bool = Field(default=True)
@@ -236,6 +243,19 @@ class Settings(BaseSettings):
             return f"{base.rstrip('/')}{self.cryptopay_webhook_path}"
         return None
 
+    @computed_field
+    @property
+    def freekassa_webhook_path(self) -> str:
+        return "/webhook/freekassa"
+
+    @computed_field
+    @property
+    def freekassa_full_webhook_url(self) -> Optional[str]:
+        base = self.WEBHOOK_BASE_URL
+        if base:
+            return f"{base.rstrip('/')}{self.freekassa_webhook_path}"
+        return None
+
     # Computed YooKassa receipt fields based on recurring toggle
     @computed_field
     @property
@@ -365,6 +385,14 @@ def get_settings() -> Settings:
             if not _settings_instance.YOOKASSA_SHOP_ID or not _settings_instance.YOOKASSA_SECRET_KEY:
                 logging.warning(
                     "CRITICAL: YooKassa credentials (SHOP_ID or SECRET_KEY) are not set. Payments will not work."
+                )
+            if _settings_instance.FREEKASSA_ENABLED and (
+                not _settings_instance.FREEKASSA_MERCHANT_ID
+                or not _settings_instance.FREEKASSA_FIRST_SECRET
+                or not _settings_instance.FREEKASSA_SECOND_SECRET
+            ):
+                logging.warning(
+                    "CRITICAL: FreeKassa is enabled but credentials are incomplete (merchant ID or secret words). FreeKassa payments will not work."
                 )
 
         except ValidationError as e:
