@@ -337,8 +337,14 @@ async def confirm_broadcast_callback_handler(
         # Prepare queue stats presentation
         queue_stats = queue_manager.get_queue_stats()
         back_keyboard = get_back_to_admin_panel_keyboard(current_lang, i18n)
+        initial_user_failed = queue_stats.get("user_failed_messages", 0)
+        initial_group_failed = queue_stats.get("group_failed_messages", 0)
 
         def build_queue_status(stats: dict) -> str:
+            dynamic_failed = max(
+                0, stats.get("user_failed_messages", 0) - initial_user_failed
+            ) + max(0, stats.get("group_failed_messages", 0) - initial_group_failed)
+            total_failed = failed_count + dynamic_failed
             return _(
                 "broadcast_queue_result",
                 default=(
@@ -351,7 +357,7 @@ async def confirm_broadcast_callback_handler(
                     "ℹ️ Сообщения будут отправлены автоматически с соблюдением лимитов Telegram."
                 ),
                 sent_count=sent_count,
-                failed_count=failed_count,
+                failed_count=total_failed,
                 user_queue_size=stats["user_queue_size"],
                 group_queue_size=stats["group_queue_size"],
             )
