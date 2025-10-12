@@ -1,10 +1,13 @@
+import asyncio
 import hashlib
+import hmac
+import json
 import logging
+import time
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional, Dict, Any
-from urllib.parse import urlencode
+from typing import Optional, Dict, Any, Tuple
 
-from aiohttp import web
+from aiohttp import ClientSession, ClientTimeout, web
 from aiogram import Bot
 from sqlalchemy.orm import sessionmaker
 
@@ -36,68 +39,162 @@ class FreeKassaService:
         self.subscription_service = subscription_service
         self.referral_service = referral_service
 
-        self.merchant_id: Optional[str] = settings.FREEKASSA_MERCHANT_ID
-        self.first_secret: Optional[str] = settings.FREEKASSA_FIRST_SECRET
+        self.shop_id: Optional[str] = settings.FREEKASSA_MERCHANT_ID
+        self.api_key: Optional[str] = settings.FREEKASSA_API_KEY
         self.second_secret: Optional[str] = settings.FREEKASSA_SECOND_SECRET
-        self.payment_url: str = settings.FREEKASSA_PAYMENT_URL.rstrip("/")
-        self.currency: str = settings.FREEKASSA_CURRENCY.upper() if settings.FREEKASSA_CURRENCY else "RUB"
+        self.default_currency: str = (
+            settings.FREEKASSA_CURRENCY or settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
+        ).upper()
+        self.server_ip: Optional[str] = settings.FREEKASSA_PAYMENT_IP
 
-        self.configured: bool = bool(
-            settings.FREEKASSA_ENABLED
-            and self.merchant_id
-            and self.first_secret
-            and self.second_secret
-        )
+        self.api_base_url: str = "https://api.fk.life/v1"
+        self._timeout = ClientTimeout(total=15)
+        self._session: Optional[ClientSession] = None
+        self._nonce_lock = asyncio.Lock()
+        self._last_nonce = int(time.time() * 1000)
+
+        self.configured: bool = bool(settings.FREEKASSA_ENABLED and self.shop_id and self.api_key)
         if not self.configured:
             logging.warning("FreeKassaService initialized but not fully configured. Payments disabled.")
+        if settings.FREEKASSA_ENABLED and not self.server_ip:
+            logging.warning("FreeKassaService: FREEKASSA_PAYMENT_IP is not set. Requests may be rejected by the provider.")
 
     @staticmethod
     def _format_amount(amount: float) -> str:
-        """Format amount for signatures with two decimal places."""
+        """Format amount for payloads and signature with two decimal places."""
         quantized = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         return f"{quantized:.2f}"
 
-    def build_payment_link(
+    async def create_order(
         self,
         *,
         payment_db_id: int,
         user_id: int,
         months: int,
         amount: float,
+        currency: Optional[str],
+        method_code: int,
+        email: Optional[str] = None,
+        ip_address: Optional[str] = None,
         extra_params: Optional[Dict[str, Any]] = None,
-    ) -> Optional[str]:
+    ) -> Tuple[bool, Dict[str, Any]]:
         if not self.configured:
-            logging.error("FreeKassaService is not configured. Cannot build payment link.")
-            return None
+            logging.error("FreeKassaService is not configured. Cannot create order.")
+            return False, {"message": "service_not_configured"}
 
+        ip_address = ip_address or self.server_ip
+        if not ip_address:
+            logging.error("FreeKassaService: payment IP is required but not configured.")
+            return False, {"message": "missing_ip"}
+
+        email = email or f"{user_id}@telegram.org"
         amount_str = self._format_amount(amount)
-        signature_source = f"{self.merchant_id}:{amount_str}:{self.first_secret}:{payment_db_id}"
-        signature = hashlib.md5(signature_source.encode("utf-8")).hexdigest()
+        currency_code = (currency or self.default_currency or "RUB").upper()
 
-        params: Dict[str, Any] = {
-            "m": self.merchant_id,
-            "oa": amount_str,
-            "o": str(payment_db_id),
-            "currency": self.currency,
-            "s": signature,
+        payload: Dict[str, Any] = {
+            "shopId": int(self.shop_id),
+            "nonce": await self._generate_nonce(),
+            "paymentId": str(payment_db_id),
+            "i": int(method_code),
+            "amount": amount_str,
+            "currency": currency_code,
+            "email": email,
+            "ip": ip_address,
             "us_user_id": str(user_id),
             "us_months": str(months),
+            "us_payment_db_id": str(payment_db_id),
         }
+
         if extra_params:
             for key, value in extra_params.items():
                 if value is None:
                     continue
-                params[f"us_{key}"] = value
+                payload[key] = value
 
-        query_string = urlencode(params, doseq=False, safe=":")
-        return f"{self.payment_url}?{query_string}"
+        payload["signature"] = self._sign_payload(payload)
 
-    def _validate_signature(self, merchant_order_id: str, amount: str, provided_signature: str) -> bool:
-        if not self.configured:
+        session = await self._get_session()
+        url = f"{self.api_base_url}/orders/create"
+        try:
+            async with session.post(url, json=payload) as response:
+                response_text = await response.text()
+                try:
+                    response_data = json.loads(response_text) if response_text else {}
+                except json.JSONDecodeError:
+                    logging.error("FreeKassa create_order: failed to decode JSON: %s", response_text)
+                    return False, {"status": response.status, "message": "invalid_json", "raw": response_text}
+
+                if response.status != 200 or response_data.get("type") != "success":
+                    logging.error(
+                        "FreeKassa create_order: API returned error (status=%s, body=%s)",
+                        response.status,
+                        response_data,
+                    )
+                    return False, {"status": response.status, "message": response_data}
+
+                return True, response_data
+        except Exception as exc:
+            logging.error("FreeKassa create_order: request failed: %s", exc, exc_info=True)
+            return False, {"message": str(exc)}
+
+    async def _get_session(self) -> ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = ClientSession(timeout=self._timeout)
+        return self._session
+
+    async def _generate_nonce(self) -> int:
+        async with self._nonce_lock:
+            candidate = int(time.time() * 1000)
+            if candidate <= self._last_nonce:
+                candidate = self._last_nonce + 1
+            self._last_nonce = candidate
+            return candidate
+
+    def _sign_payload(self, payload: Dict[str, Any]) -> str:
+        if not self.api_key:
+            raise RuntimeError("FreeKassa API key is not configured.")
+        items = [
+            (key, value)
+            for key, value in payload.items()
+            if key != "signature" and value is not None
+        ]
+        items.sort(key=lambda pair: pair[0])
+        message = "|".join(str(value) for _, value in items)
+        return hmac.new(self.api_key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    async def close(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
+
+    def _validate_signature(
+        self,
+        merchant_order_id: str,
+        amount: str,
+        provided_signature: str,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        if not provided_signature:
             return False
-        signature_source = f"{self.merchant_id}:{amount}:{self.second_secret}:{merchant_order_id}"
-        expected_signature = hashlib.md5(signature_source.encode("utf-8")).hexdigest()
-        return expected_signature.lower() == provided_signature.lower()
+
+        if self.shop_id and self.second_secret:
+            signature_source = f"{self.shop_id}:{amount}:{self.second_secret}:{merchant_order_id}"
+            expected_signature = hashlib.md5(signature_source.encode("utf-8")).hexdigest()
+            if expected_signature.lower() == provided_signature.lower():
+                return True
+
+        if self.api_key and payload:
+            items = [
+                (key, value)
+                for key, value in payload.items()
+                if key not in {"signature", "SIGN"} and value is not None
+            ]
+            items.sort(key=lambda pair: pair[0])
+            message = "|".join(str(value) for _, value in items)
+            alt_signature = hmac.new(self.api_key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
+            if alt_signature.lower() == provided_signature.lower():
+                return True
+
+        return False
 
     async def webhook_route(self, request: web.Request) -> web.Response:
         if not self.configured:
@@ -109,21 +206,29 @@ class FreeKassaService:
             logging.error(f"FreeKassa webhook: failed to read POST data: {e}")
             return web.Response(status=400, text="bad_request")
 
-        if not data:
+        payload_dict: Dict[str, Any]
+        if data:
+            payload_dict = {str(k): v for k, v in data.items()}
+        else:
             try:
-                data = await request.json()
+                json_payload = await request.json()
+                payload_dict = {str(k): v for k, v in json_payload.items()} if isinstance(json_payload, dict) else {}
+                data = json_payload
             except Exception:
+                payload_dict = {}
                 data = {}
 
         def _get(key: str, default: Optional[str] = None) -> Optional[str]:
-            return data.get(key) or data.get(key.lower()) or default
+            if isinstance(data, dict):
+                return data.get(key) or data.get(key.lower()) or default
+            return payload_dict.get(key) or payload_dict.get(key.lower()) or default
 
         merchant_id = _get("MERCHANT_ID")
-        if merchant_id != self.merchant_id:
+        if merchant_id != self.shop_id:
             logging.error(f"FreeKassa webhook: merchant mismatch (got {merchant_id})")
             return web.Response(status=403, text="merchant_mismatch")
 
-        signature = _get("SIGN")
+        signature = _get("SIGN") or _get("signature")
         if not signature:
             logging.error("FreeKassa webhook: missing signature")
             return web.Response(status=400, text="missing_signature")
@@ -136,7 +241,7 @@ class FreeKassaService:
             logging.error("FreeKassa webhook: missing order_id or amount")
             return web.Response(status=400, text="missing_data")
 
-        if not self._validate_signature(order_id_str, amount_str, signature):
+        if not self._validate_signature(order_id_str, amount_str, signature, payload_dict):
             logging.error("FreeKassa webhook: invalid signature")
             return web.Response(status=403, text="invalid_signature")
 

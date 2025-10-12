@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     FREEKASSA_SECOND_SECRET: Optional[str] = None
     FREEKASSA_PAYMENT_URL: str = Field(default="https://pay.freekassa.ru/")
     FREEKASSA_CURRENCY: str = Field(default="RUB")
+    FREEKASSA_API_KEY: Optional[str] = None
+    FREEKASSA_PAYMENT_IP: Optional[str] = None
 
     YOOKASSA_ENABLED: bool = Field(default=True)
     STARS_ENABLED: bool = Field(default=True)
@@ -386,14 +388,18 @@ def get_settings() -> Settings:
                 logging.warning(
                     "CRITICAL: YooKassa credentials (SHOP_ID or SECRET_KEY) are not set. Payments will not work."
                 )
-            if _settings_instance.FREEKASSA_ENABLED and (
-                not _settings_instance.FREEKASSA_MERCHANT_ID
-                or not _settings_instance.FREEKASSA_FIRST_SECRET
-                or not _settings_instance.FREEKASSA_SECOND_SECRET
-            ):
-                logging.warning(
-                    "CRITICAL: FreeKassa is enabled but credentials are incomplete (merchant ID or secret words). FreeKassa payments will not work."
-                )
+            if _settings_instance.FREEKASSA_ENABLED:
+                if (
+                    not _settings_instance.FREEKASSA_MERCHANT_ID
+                    or not _settings_instance.FREEKASSA_API_KEY
+                ):
+                    logging.warning(
+                        "CRITICAL: FreeKassa is enabled but SHOP_ID or API key is missing. FreeKassa payments will not work."
+                    )
+                if not _settings_instance.FREEKASSA_SECOND_SECRET:
+                    logging.warning(
+                        "WARNING: FreeKassa second secret is not set. Incoming payment notifications cannot be verified."
+                    )
 
         except ValidationError as e:
             logging.critical(
