@@ -378,7 +378,7 @@ class FreeKassaService:
                 await notification_service.notify_payment_received(
                     user_id=payment.user_id,
                     amount=float(payment.amount),
-                    currency=self.currency or self.settings.DEFAULT_CURRENCY_SYMBOL,
+                    currency=self.default_currency,
                     months=months,
                     payment_provider="freekassa",
                     username=db_user.username if db_user else None,
