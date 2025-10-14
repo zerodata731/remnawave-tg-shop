@@ -1,5 +1,7 @@
 import logging
+from datetime import datetime
 from aiogram import Router, F, types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -238,7 +240,13 @@ async def pay_yk_callback_handler(callback: types.CallbackQuery, settings: Setti
 
         await callback.message.edit_text(
             get_text(key="payment_link_message", months=months),
-            reply_markup=get_payment_url_keyboard(payment_response_yk["confirmation_url"], current_lang, i18n),
+            reply_markup=get_payment_url_keyboard(
+                payment_response_yk["confirmation_url"],
+                current_lang,
+                i18n,
+                back_callback=f"subscribe_period:{months}",
+                back_text_key="back_to_payment_methods_button",
+            ),
             disable_web_page_preview=False,
         )
     else:
@@ -354,7 +362,9 @@ async def pay_fk_callback_handler(
 
     if success:
         location = response_data.get("location")
-        provider_identifier = response_data.get("orderHash") or response_data.get("orderId")
+        order_hash = response_data.get("orderHash")
+        order_id_api = response_data.get("orderId")
+        provider_identifier = order_hash or order_id_api
 
         if provider_identifier:
             try:
@@ -373,18 +383,36 @@ async def pay_fk_callback_handler(
                 )
 
         if location:
+            order_identifier_display = str(order_id_api or provider_identifier or payment_record.payment_id)
+            order_info_text = get_text(
+                "free_kassa_order_info",
+                order_id=order_identifier_display,
+                date=datetime.now().strftime("%Y-%m-%d"),
+            )
             try:
                 await callback.message.edit_text(
-                    get_text(key="payment_link_message", months=months),
-                    reply_markup=get_payment_url_keyboard(location, current_lang, i18n),
+                    f"{order_info_text}\n\n" + get_text(key="payment_link_message", months=months),
+                    reply_markup=get_payment_url_keyboard(
+                        location,
+                        current_lang,
+                        i18n,
+                        back_callback=f"subscribe_period:{months}",
+                        back_text_key="back_to_payment_methods_button",
+                    ),
                     disable_web_page_preview=False,
                 )
             except Exception as e_edit:
                 logging.warning(f"FreeKassa: failed to display payment link ({e_edit}), sending new message.")
                 try:
                     await callback.message.answer(
-                        get_text(key="payment_link_message", months=months),
-                        reply_markup=get_payment_url_keyboard(location, current_lang, i18n),
+                        f"{order_info_text}\n\n" + get_text(key="payment_link_message", months=months),
+                        reply_markup=get_payment_url_keyboard(
+                            location,
+                            current_lang,
+                            i18n,
+                            back_callback=f"subscribe_period:{months}",
+                            back_text_key="back_to_payment_methods_button",
+                        ),
                         disable_web_page_preview=False,
                     )
                 except Exception:
@@ -481,14 +509,26 @@ async def pay_crypto_callback_handler(
         try:
             await callback.message.edit_text(
                 get_text(key="payment_link_message", months=months),
-                reply_markup=get_payment_url_keyboard(invoice_url, current_lang, i18n),
+                reply_markup=get_payment_url_keyboard(
+                    invoice_url,
+                    current_lang,
+                    i18n,
+                    back_callback=f"subscribe_period:{months}",
+                    back_text_key="back_to_payment_methods_button",
+                ),
                 disable_web_page_preview=False,
             )
         except Exception:
             try:
                 await callback.message.answer(
                     get_text(key="payment_link_message", months=months),
-                    reply_markup=get_payment_url_keyboard(invoice_url, current_lang, i18n),
+                    reply_markup=get_payment_url_keyboard(
+                        invoice_url,
+                        current_lang,
+                        i18n,
+                        back_callback=f"subscribe_period:{months}",
+                        back_text_key="back_to_payment_methods_button",
+                    ),
                     disable_web_page_preview=False,
                 )
             except Exception:
@@ -555,6 +595,18 @@ async def pay_stars_callback_handler(
     )
 
     if payment_db_id:
+        try:
+            await callback.message.edit_text(
+                get_text("payment_invoice_sent_message", months=months),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(
+                        text=get_text("back_to_payment_methods_button"),
+                        callback_data=f"subscribe_period:{months}",
+                    )]
+                ]),
+            )
+        except Exception as e_edit:
+            logging.warning(f"Stars payment: failed to show invoice info message ({e_edit})")
         try:
             await callback.answer()
         except Exception:
