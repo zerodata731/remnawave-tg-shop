@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import hashlib
 import hmac
 import json
@@ -42,9 +43,7 @@ class FreeKassaService:
         self.shop_id: Optional[str] = settings.FREEKASSA_MERCHANT_ID
         self.api_key: Optional[str] = settings.FREEKASSA_API_KEY
         self.second_secret: Optional[str] = settings.FREEKASSA_SECOND_SECRET
-        self.default_currency: str = (
-            settings.FREEKASSA_CURRENCY or settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
-        ).upper()
+        self.default_currency: str = (settings.DEFAULT_CURRENCY_SYMBOL or "RUB").upper()
         self.server_ip: Optional[str] = settings.FREEKASSA_PAYMENT_IP
 
         self.api_base_url: str = "https://api.fk.life/v1"
@@ -360,8 +359,21 @@ class FreeKassaService:
                     end_date=end_date_str,
                     config_link=config_link,
                 )
+            if provider_payment_id:
+                order_info_text = _(
+                    "free_kassa_order_full",
+                    order_id=provider_payment_id,
+                    date=datetime.now().strftime("%Y-%m-%d"),
+                )
+                text = f"{order_info_text}\n{text}"
 
-            markup = get_connect_and_main_keyboard(lang, self.i18n, self.settings, config_link)
+            markup = get_connect_and_main_keyboard(
+                lang,
+                self.i18n,
+                self.settings,
+                config_link,
+                preserve_message=True,
+            )
             try:
                 await self.bot.send_message(
                     payment.user_id,
