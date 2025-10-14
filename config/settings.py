@@ -49,7 +49,6 @@ class Settings(BaseSettings):
     FREEKASSA_FIRST_SECRET: Optional[str] = None
     FREEKASSA_SECOND_SECRET: Optional[str] = None
     FREEKASSA_PAYMENT_URL: str = Field(default="https://pay.freekassa.ru/")
-    FREEKASSA_CURRENCY: str = Field(default="RUB")
     FREEKASSA_API_KEY: Optional[str] = None
     FREEKASSA_PAYMENT_IP: Optional[str] = None
 
@@ -399,6 +398,10 @@ def get_settings() -> Settings:
                 if not _settings_instance.FREEKASSA_SECOND_SECRET:
                     logging.warning(
                         "WARNING: FreeKassa second secret is not set. Incoming payment notifications cannot be verified."
+                    )
+                if not _settings_instance.subscription_options:
+                    logging.warning(
+                        "CRITICAL: FreeKassa is enabled but no subscription prices are configured (RUB_PRICE_*). Users will not see payment buttons."
                     )
 
         except ValidationError as e:

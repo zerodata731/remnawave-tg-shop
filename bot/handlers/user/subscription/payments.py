@@ -344,7 +344,7 @@ async def pay_fk_callback_handler(
         user_id=payment_record.user_id,
         months=months,
         amount=price_rub,
-        currency=settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
+        currency=freekassa_service.default_currency,
         method_code=44,
         ip_address=freekassa_service.server_ip,
         extra_params={

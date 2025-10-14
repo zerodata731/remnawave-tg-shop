@@ -42,9 +42,7 @@ class FreeKassaService:
         self.shop_id: Optional[str] = settings.FREEKASSA_MERCHANT_ID
         self.api_key: Optional[str] = settings.FREEKASSA_API_KEY
         self.second_secret: Optional[str] = settings.FREEKASSA_SECOND_SECRET
-        self.default_currency: str = (
-            settings.FREEKASSA_CURRENCY or settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
-        ).upper()
+        self.default_currency: str = (settings.DEFAULT_CURRENCY_SYMBOL or "RUB").upper()
         self.server_ip: Optional[str] = settings.FREEKASSA_PAYMENT_IP
 
         self.api_base_url: str = "https://api.fk.life/v1"
@@ -378,7 +376,7 @@ class FreeKassaService:
                 await notification_service.notify_payment_received(
                     user_id=payment.user_id,
                     amount=float(payment.amount),
-                    currency=self.currency or self.settings.DEFAULT_CURRENCY_SYMBOL,
+                    currency=self.default_currency or self.settings.DEFAULT_CURRENCY_SYMBOL,
                     months=months,
                     payment_provider="freekassa",
                     username=db_user.username if db_user else None,
