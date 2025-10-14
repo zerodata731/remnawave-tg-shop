@@ -1,6 +1,5 @@
 import logging
 from aiogram import Router, F, types
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -340,133 +339,16 @@ async def pay_fk_callback_handler(
             pass
         return
 
-    method_keyboard = InlineKeyboardBuilder()
-    method_keyboard.button(
-        text=get_text("freekassa_method_qr"),
-        callback_data=f"pay_fk_method:{payment_record.payment_id}:44",
-    )
-    method_keyboard.button(
-        text=get_text("freekassa_method_card"),
-        callback_data=f"pay_fk_method:{payment_record.payment_id}:36",
-    )
-    method_keyboard.button(
-        text=get_text("freekassa_method_sberpay"),
-        callback_data=f"pay_fk_method:{payment_record.payment_id}:43",
-    )
-    method_keyboard.button(
-        text=get_text("back_to_main_menu_button"),
-        callback_data="main_action:subscribe",
-    )
-    method_keyboard.adjust(1)
-
-    try:
-        await callback.message.edit_text(
-            get_text("freekassa_choose_method"),
-            reply_markup=method_keyboard.as_markup(),
-        )
-    except Exception as e_edit:
-        logging.warning(f"FreeKassa: failed to show method selector ({e_edit}), sending new message.")
-        try:
-            await callback.message.answer(
-                get_text("freekassa_choose_method"),
-                reply_markup=method_keyboard.as_markup(),
-            )
-        except Exception:
-            pass
-    try:
-        await callback.answer()
-    except Exception:
-        pass
-
-
-@router.callback_query(F.data.startswith("pay_fk_method:"))
-async def pay_fk_method_callback_handler(
-    callback: types.CallbackQuery,
-    settings: Settings,
-    i18n_data: dict,
-    freekassa_service: FreeKassaService,
-    session: AsyncSession,
-):
-    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
-    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
-    get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
-
-    if not i18n or not callback.message:
-        try:
-            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
-        except Exception:
-            pass
-        return
-
-    if not freekassa_service or not freekassa_service.configured:
-        try:
-            await callback.answer(get_text("payment_service_unavailable_alert"), show_alert=True)
-        except Exception:
-            pass
-        try:
-            await callback.message.edit_text(get_text("payment_service_unavailable"))
-        except Exception:
-            pass
-        return
-
-    try:
-        _, payload = callback.data.split(":", 1)
-        payment_id_str, method_code = payload.split(":")
-        payment_id = int(payment_id_str)
-    except (ValueError, IndexError):
-        logging.error(f"FreeKassa: invalid method payload {callback.data}")
-        try:
-            await callback.answer(get_text("error_try_again"), show_alert=True)
-        except Exception:
-            pass
-        return
-
-    try:
-        payment_record = await payment_dal.get_payment_by_db_id(session, payment_id)
-    except Exception as e_db:
-        logging.error(f"FreeKassa: failed to load payment {payment_id}: {e_db}")
-        payment_record = None
-
-    if not payment_record:
-        try:
-            await callback.answer(get_text("error_payment_gateway"), show_alert=True)
-        except Exception:
-            pass
-        return
-
-    if payment_record.user_id != callback.from_user.id:
-        logging.warning(
-            f"FreeKassa: user {callback.from_user.id} attempted to access payment {payment_id} owned by {payment_record.user_id}"
-        )
-        try:
-            await callback.answer(get_text("error_payment_gateway"), show_alert=True)
-        except Exception:
-            pass
-        return
-
-    months = payment_record.subscription_duration_months or 1
-    amount = float(payment_record.amount)
-
-    try:
-        method_code_int = int(method_code)
-    except (TypeError, ValueError):
-        logging.error(f"FreeKassa: invalid method code {method_code} for payment {payment_record.payment_id}")
-        try:
-            await callback.answer(get_text("error_payment_gateway"), show_alert=True)
-        except Exception:
-            pass
-        return
-
     success, response_data = await freekassa_service.create_order(
         payment_db_id=payment_record.payment_id,
         user_id=payment_record.user_id,
         months=months,
-        amount=amount,
+        amount=price_rub,
         currency=settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
-        method_code=method_code_int,
+        method_code=44,
         ip_address=freekassa_service.server_ip,
         extra_params={
-            "us_method": method_code_int,
+            "us_method": 44,
         },
     )
 

@@ -118,17 +118,17 @@ def get_payment_method_keyboard(months: int, price: float,
                                 i18n_instance, settings: Settings) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
-    if settings.STARS_ENABLED and stars_price is not None:
-        builder.button(text=_("pay_with_stars_button"),
-                       callback_data=f"pay_stars:{months}:{stars_price}")
-    if settings.TRIBUTE_ENABLED and tribute_url:
-        builder.button(text=_("pay_with_tribute_button"), url=tribute_url)
+    if settings.FREEKASSA_ENABLED:
+        builder.button(text=_("pay_with_sbp_button"),
+                       callback_data=f"pay_fk:{months}:{price}")
     if settings.YOOKASSA_ENABLED:
         builder.button(text=_("pay_with_yookassa_button"),
                        callback_data=f"pay_yk:{months}:{price}")
-    if settings.FREEKASSA_ENABLED:
-        builder.button(text=_("pay_with_freekassa_button"),
-                       callback_data=f"pay_fk:{months}:{price}")
+    if settings.TRIBUTE_ENABLED and tribute_url:
+        builder.button(text=_("pay_with_tribute_button"), url=tribute_url)
+    if settings.STARS_ENABLED and stars_price is not None:
+        builder.button(text=_("pay_with_stars_button"),
+                       callback_data=f"pay_stars:{months}:{stars_price}")
     if settings.CRYPTOPAY_ENABLED:
         builder.button(text=_("pay_with_cryptopay_button"),
                        callback_data=f"pay_crypto:{months}:{price}")
