@@ -24,6 +24,7 @@
   "subscribe_for_months_button": "{months} мес. - {price} {currency_symbol}",
   "choose_payment_method": "Выберите способ оплаты:",
   "pay_button": "💳 Оплатить",
+  "pay_with_freekassa_button": "💳 FreeKassa",
   "pay_with_yookassa_button": "💳 ЮKassa",
   "pay_with_sbp_button": "📱 СБП",
   "back_to_payment_methods_button": "⬅️ Назад к выбору оплаты",

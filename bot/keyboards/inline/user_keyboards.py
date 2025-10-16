@@ -119,7 +119,7 @@ def get_payment_method_keyboard(months: int, price: float,
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
     if settings.FREEKASSA_ENABLED:
-        builder.button(text=_("pay_with_sbp_button"),
+        builder.button(text=_("pay_with_freekassa_button"),
                        callback_data=f"pay_fk:{months}:{price}")
     if settings.YOOKASSA_ENABLED:
         builder.button(text=_("pay_with_yookassa_button"),

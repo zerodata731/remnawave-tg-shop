@@ -24,6 +24,7 @@
   "subscribe_for_months_button": "{months} mo. - {price} {currency_symbol}",
   "choose_payment_method": "Choose payment method:",
   "pay_button": "💳 Pay",
+  "pay_with_freekassa_button": "💳 FreeKassa",
   "pay_with_yookassa_button": "💳 YooKassa",
   "pay_with_sbp_button": "📱 SBP",
   "back_to_payment_methods_button": "⬅️ Back to payment methods",
