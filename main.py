@@ -16,7 +16,7 @@ async def main():
     session_factory = init_db_connection(settings)
     if not session_factory:
         logging.critical(
-            "Failed to initialize DB connection and session factory. Exiting.")
+            "Failed to initialize DB connection and session factory. Exiting")
         return
 
     await init_db(settings, session_factory)
