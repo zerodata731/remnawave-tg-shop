@@ -186,4 +186,3 @@
 
 ## ❤️ Поддержка
 - Карты РФ и зарубежные: [Tribute](https://t.me/tribute/app?startapp=dqdg)
-- Crypto: `USDT TRC-20 TT3SqBbfU4vYm6SUwUVNZsy278m2xbM4GE`
