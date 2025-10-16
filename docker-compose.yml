@@ -1,9 +1,9 @@
 services:
-  remnawave-tg-shop:
-    image: ghcr.io/zerodata731/remnawave-tg-shop:${IMAGE_TAG:-latest}
+  remnawave-tg-shop-zorro:
+    image: ghcr.io/zerodata731/remnawave-tg-shop-zorro:${IMAGE_TAG:-latest}
 #    build: .
-    container_name: remnawave-tg-shop
-    hostname: remnawave-tg-shop
+    container_name: remnawave-tg-shop-zorro
+    hostname: remnawave-tg-shop-zorro
     env_file:
       - .env
     networks:
@@ -12,17 +12,17 @@ services:
       - ./locales:/app/locales
     restart: unless-stopped
     depends_on:
-      remnawave-tg-shop-db:
+      remnawave-tg-shop-zorro-db:
         condition: service_healthy
 
-  remnawave-tg-shop-db:
+  remnawave-tg-shop-zorro-db:
     image: postgres:17
-    container_name: remnawave-tg-shop-db
-    hostname: remnawave-tg-shop-db
+    container_name: remnawave-tg-shop-zorro-db
+    hostname: remnawave-tg-shop-zorro-db
     env_file:
       - .env
     volumes:
-      - remnawave-tg-shop-db-data:/var/lib/postgresql/data
+      - remnawave-tg-shop-zorro-db-data:/var/lib/postgresql/data
     networks:
       - remnawave-network
     restart: unless-stopped
@@ -37,5 +37,5 @@ networks:
     external: true
 
 volumes:
-  remnawave-tg-shop-db-data:
-    name: remnawave-tg-shop-db-data
+  remnawave-tg-shop-zorro-db-data:
+    name: remnawave-tg-shop-zorro-db-data

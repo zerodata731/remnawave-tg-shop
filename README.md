@@ -44,8 +44,8 @@
 
 1.  **Клонируйте репозиторий:**
     ```bash
-    git clone https://github.com/zerodata731/remnawave-tg-shop
-    cd remnawave-tg-shop
+    git clone https://github.com/zerodata731/remnawave-tg-shop-zorro
+    cd remnawave-tg-shop-zorro
     ```
 
 2.  **Создайте и настройте файл `.env`:**
@@ -130,22 +130,22 @@
     Вам понадобится обратный прокси (например, Nginx) для обработки HTTPS-трафика и перенаправления запросов на контейнер с ботом.
 
     **Пути для перенаправления:**
-    -   `https://<ваш_домен>/webhook/yookassa` → `http://remnawave-tg-shop:<WEB_SERVER_PORT>/webhook/yookassa`
-    -   `https://<ваш_домен>/webhook/cryptopay` → `http://remnawave-tg-shop:<WEB_SERVER_PORT>/webhook/cryptopay`
-    -   `https://<ваш_домен>/webhook/tribute` → `http://remnawave-tg-shop:<WEB_SERVER_PORT>/webhook/tribute`
-    -   `https://<ваш_домен>/webhook/panel` → `http://remnawave-tg-shop:<WEB_SERVER_PORT>/webhook/panel`
+    -   `https://<ваш_домен>/webhook/yookassa` → `http://remnawave-tg-shop-zorro:<WEB_SERVER_PORT>/webhook/yookassa`
+    -   `https://<ваш_домен>/webhook/cryptopay` → `http://remnawave-tg-shop-zorro:<WEB_SERVER_PORT>/webhook/cryptopay`
+    -   `https://<ваш_домен>/webhook/tribute` → `http://remnawave-tg-shop-zorro:<WEB_SERVER_PORT>/webhook/tribute`
+    -   `https://<ваш_домен>/webhook/panel` → `http://remnawave-tg-shop-zorro:<WEB_SERVER_PORT>/webhook/panel`
     -   **Для Telegram:** Бот автоматически установит вебхук, если в `.env` указан `WEBHOOK_BASE_URL`. Путь будет `https://<ваш_домен>/<BOT_TOKEN>`.
 
-    Где `remnawave-tg-shop` — это имя сервиса из `docker-compose.yml`, а `<WEB_SERVER_PORT>` — порт, указанный в `.env`.
+    Где `remnawave-tg-shop-zorro` — это имя сервиса из `docker-compose.yml`, а `<WEB_SERVER_PORT>` — порт, указанный в `.env`.
 
 5.  **Просмотр логов:**
     ```bash
-    docker compose logs -f remnawave-tg-shop
+    docker compose logs -f remnawave-tg-shop-zorro
     ```
 
 ## 🐳 Docker
 
-Файлы `Dockerfile` и `docker-compose.yml` уже настроены для сборки и запуска проекта. `docker-compose.yml` использует образ `ghcr.io/zerodata731/remnawave-tg-shop:${IMAGE_TAG:-latest}`, но при локальной разработке вы можете раскомментировать `build: .`.
+Файлы `Dockerfile` и `docker-compose.yml` уже настроены для сборки и запуска проекта. `docker-compose.yml` использует образ `ghcr.io/zerodata731/remnawave-tg-shop-zorro:${IMAGE_TAG:-latest}`, но при локальной разработке вы можете раскомментировать `build: .`.
 
 ## 📁 Структура проекта
 
