@@ -44,7 +44,7 @@
 
 1.  **Клонируйте репозиторий:**
     ```bash
-    git clone https://github.com/machka-pasla/remnawave-tg-shop
+    git clone https://github.com/zerodata731/remnawave-tg-shop
     cd remnawave-tg-shop
     ```
 
@@ -145,7 +145,7 @@
 
 ## 🐳 Docker
 
-Файлы `Dockerfile` и `docker-compose.yml` уже настроены для сборки и запуска проекта. `docker-compose.yml` использует готовый образ с GitHub Container Registry, но вы можете раскомментировать `build: .` для локальной сборки.
+Файлы `Dockerfile` и `docker-compose.yml` уже настроены для сборки и запуска проекта. `docker-compose.yml` использует образ `ghcr.io/zerodata731/remnawave-tg-shop:${IMAGE_TAG:-latest}`, но при локальной разработке вы можете раскомментировать `build: .`.
 
 ## 📁 Структура проекта
 
