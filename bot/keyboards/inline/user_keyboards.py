@@ -118,14 +118,17 @@ def get_payment_method_keyboard(months: int, price: float,
                                 i18n_instance, settings: Settings) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
-    if settings.STARS_ENABLED and stars_price is not None:
-        builder.button(text=_("pay_with_stars_button"),
-                       callback_data=f"pay_stars:{months}:{stars_price}")
-    if settings.TRIBUTE_ENABLED and tribute_url:
-        builder.button(text=_("pay_with_tribute_button"), url=tribute_url)
+    if settings.FREEKASSA_ENABLED:
+        builder.button(text=_("pay_with_sbp_button"),
+                       callback_data=f"pay_fk:{months}:{price}")
     if settings.YOOKASSA_ENABLED:
         builder.button(text=_("pay_with_yookassa_button"),
                        callback_data=f"pay_yk:{months}:{price}")
+    if settings.TRIBUTE_ENABLED and tribute_url:
+        builder.button(text=_("pay_with_tribute_button"), url=tribute_url)
+    if settings.STARS_ENABLED and stars_price is not None:
+        builder.button(text=_("pay_with_stars_button"),
+                       callback_data=f"pay_stars:{months}:{stars_price}")
     if settings.CRYPTOPAY_ENABLED:
         builder.button(text=_("pay_with_cryptopay_button"),
                        callback_data=f"pay_crypto:{months}:{price}")
@@ -135,13 +138,20 @@ def get_payment_method_keyboard(months: int, price: float,
     return builder.as_markup()
 
 
-def get_payment_url_keyboard(payment_url: str, lang: str,
-                             i18n_instance) -> InlineKeyboardMarkup:
+def get_payment_url_keyboard(payment_url: str,
+                             lang: str,
+                             i18n_instance,
+                             back_callback: Optional[str] = None,
+                             back_text_key: str = "back_to_main_menu_button"
+                             ) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
     builder.button(text=_(key="pay_button"), url=payment_url)
-    builder.button(text=_(key="back_to_main_menu_button"),
-                   callback_data="main_action:back_to_main")
+    if back_callback:
+        builder.button(text=_(key=back_text_key), callback_data=back_callback)
+    else:
+        builder.button(text=_(key="back_to_main_menu_button"),
+                       callback_data="main_action:back_to_main")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -189,7 +199,8 @@ def get_connect_and_main_keyboard(
         lang: str,
         i18n_instance,
         settings: Settings,
-        config_link: Optional[str]) -> InlineKeyboardMarkup:
+        config_link: Optional[str],
+        preserve_message: bool = False) -> InlineKeyboardMarkup:
     """Keyboard with a connect button and a back to main menu button."""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
@@ -213,10 +224,11 @@ def get_connect_and_main_keyboard(
             )
         )
 
+    back_callback = "main_action:back_to_main_keep" if preserve_message else "main_action:back_to_main"
     builder.row(
         InlineKeyboardButton(
             text=_("back_to_main_menu_button"),
-            callback_data="main_action:back_to_main",
+            callback_data=back_callback,
         )
     )
 

@@ -1,11 +1,14 @@
 import logging
+from datetime import datetime
 from aiogram import Router, F, types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.settings import Settings
 from bot.keyboards.inline.user_keyboards import get_payment_method_keyboard, get_payment_url_keyboard
 from bot.services.yookassa_service import YooKassaService
+from bot.services.freekassa_service import FreeKassaService
 from bot.services.crypto_pay_service import CryptoPayService
 from bot.services.stars_service import StarsService
 from bot.middlewares.i18n import JsonI18n
@@ -237,7 +240,13 @@ async def pay_yk_callback_handler(callback: types.CallbackQuery, settings: Setti
 
         await callback.message.edit_text(
             get_text(key="payment_link_message", months=months),
-            reply_markup=get_payment_url_keyboard(payment_response_yk["confirmation_url"], current_lang, i18n),
+            reply_markup=get_payment_url_keyboard(
+                payment_response_yk["confirmation_url"],
+                current_lang,
+                i18n,
+                back_callback=f"subscribe_period:{months}",
+                back_text_key="back_to_payment_methods_button",
+            ),
             disable_web_page_preview=False,
         )
     else:
@@ -257,6 +266,192 @@ async def pay_yk_callback_handler(callback: types.CallbackQuery, settings: Setti
 
     try:
         await callback.answer()
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("pay_fk:"))
+async def pay_fk_callback_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    freekassa_service: FreeKassaService,
+    session: AsyncSession,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    if not i18n or not callback.message:
+        try:
+            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    if not freekassa_service or not freekassa_service.configured:
+        logging.error("FreeKassa service is not configured or unavailable.")
+        try:
+            await callback.answer(get_text("payment_service_unavailable_alert"), show_alert=True)
+        except Exception:
+            pass
+        try:
+            await callback.message.edit_text(get_text("payment_service_unavailable"))
+        except Exception:
+            pass
+        return
+
+    try:
+        _, data_payload = callback.data.split(":", 1)
+        months_str, price_str = data_payload.split(":")
+        months = int(months_str)
+        price_rub = float(price_str)
+    except (ValueError, IndexError):
+        logging.error(f"Invalid pay_fk data in callback: {callback.data}")
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    user_id = callback.from_user.id
+    payment_description = get_text("payment_description_subscription", months=months)
+    currency_code = getattr(freekassa_service, "default_currency", None) or settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
+
+    payment_record_payload = {
+        "user_id": user_id,
+        "amount": price_rub,
+        "currency": currency_code,
+        "status": "pending_freekassa",
+        "description": payment_description,
+        "subscription_duration_months": months,
+        "provider": "freekassa",
+    }
+
+    try:
+        payment_record = await payment_dal.create_payment_record(session, payment_record_payload)
+        await session.commit()
+    except Exception as e_db_create:
+        await session.rollback()
+        logging.error(
+            f"FreeKassa: failed to create payment record for user {user_id}: {e_db_create}",
+            exc_info=True,
+        )
+        try:
+            await callback.message.edit_text(get_text("error_creating_payment_record"))
+        except Exception:
+            pass
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    success, response_data = await freekassa_service.create_order(
+        payment_db_id=payment_record.payment_id,
+        user_id=payment_record.user_id,
+        months=months,
+        amount=price_rub,
+        currency=freekassa_service.default_currency,
+        method_code=44,
+        ip_address=freekassa_service.server_ip,
+        extra_params={
+            "us_method": 44,
+        },
+    )
+
+    if success:
+        location = response_data.get("location")
+        order_hash = response_data.get("orderHash")
+        order_id_api = response_data.get("orderId")
+        provider_identifier = order_hash or order_id_api
+
+        if provider_identifier:
+            try:
+                await payment_dal.update_provider_payment_and_status(
+                    session,
+                    payment_record.payment_id,
+                    str(provider_identifier),
+                    payment_record.status,
+                )
+                await session.commit()
+            except Exception as e_status:
+                await session.rollback()
+                logging.error(
+                    f"FreeKassa: failed to store provider order id for payment {payment_record.payment_id}: {e_status}",
+                    exc_info=True,
+                )
+
+        if location:
+            order_identifier_display = str(order_id_api or provider_identifier or payment_record.payment_id)
+            order_info_text = get_text(
+                "free_kassa_order_info",
+                order_id=order_identifier_display,
+                date=datetime.now().strftime("%Y-%m-%d"),
+            )
+            try:
+                await callback.message.edit_text(
+                    f"{order_info_text}\n\n" + get_text(key="payment_link_message", months=months),
+                    reply_markup=get_payment_url_keyboard(
+                        location,
+                        current_lang,
+                        i18n,
+                        back_callback=f"subscribe_period:{months}",
+                        back_text_key="back_to_payment_methods_button",
+                    ),
+                    disable_web_page_preview=False,
+                )
+            except Exception as e_edit:
+                logging.warning(f"FreeKassa: failed to display payment link ({e_edit}), sending new message.")
+                try:
+                    await callback.message.answer(
+                        f"{order_info_text}\n\n" + get_text(key="payment_link_message", months=months),
+                        reply_markup=get_payment_url_keyboard(
+                            location,
+                            current_lang,
+                            i18n,
+                            back_callback=f"subscribe_period:{months}",
+                            back_text_key="back_to_payment_methods_button",
+                        ),
+                        disable_web_page_preview=False,
+                    )
+                except Exception:
+                    pass
+            try:
+                await callback.answer()
+            except Exception:
+                pass
+            return
+
+        logging.error(
+            "FreeKassa: create_order succeeded but no payment link returned for payment %s. Response: %s",
+            payment_record.payment_id,
+            response_data,
+        )
+    else:
+        logging.error(
+            "FreeKassa: create_order failed for payment %s with response %s",
+            payment_record.payment_id,
+            response_data,
+        )
+
+    try:
+        await payment_dal.update_payment_status_by_db_id(
+            session,
+            payment_record.payment_id,
+            "failed_creation",
+        )
+        await session.commit()
+    except Exception as e_status:
+        await session.rollback()
+        logging.error(f"FreeKassa: failed to mark payment {payment_record.payment_id} as failed_creation: {e_status}", exc_info=True)
+
+    try:
+        await callback.message.edit_text(get_text("error_payment_gateway"))
+    except Exception:
+        pass
+    try:
+        await callback.answer(get_text("error_payment_gateway"), show_alert=True)
     except Exception:
         pass
 
@@ -314,14 +509,26 @@ async def pay_crypto_callback_handler(
         try:
             await callback.message.edit_text(
                 get_text(key="payment_link_message", months=months),
-                reply_markup=get_payment_url_keyboard(invoice_url, current_lang, i18n),
+                reply_markup=get_payment_url_keyboard(
+                    invoice_url,
+                    current_lang,
+                    i18n,
+                    back_callback=f"subscribe_period:{months}",
+                    back_text_key="back_to_payment_methods_button",
+                ),
                 disable_web_page_preview=False,
             )
         except Exception:
             try:
                 await callback.message.answer(
                     get_text(key="payment_link_message", months=months),
-                    reply_markup=get_payment_url_keyboard(invoice_url, current_lang, i18n),
+                    reply_markup=get_payment_url_keyboard(
+                        invoice_url,
+                        current_lang,
+                        i18n,
+                        back_callback=f"subscribe_period:{months}",
+                        back_text_key="back_to_payment_methods_button",
+                    ),
                     disable_web_page_preview=False,
                 )
             except Exception:
@@ -389,6 +596,18 @@ async def pay_stars_callback_handler(
 
     if payment_db_id:
         try:
+            await callback.message.edit_text(
+                get_text("payment_invoice_sent_message", months=months),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(
+                        text=get_text("back_to_payment_methods_button"),
+                        callback_data=f"subscribe_period:{months}",
+                    )]
+                ]),
+            )
+        except Exception as e_edit:
+            logging.warning(f"Stars payment: failed to show invoice info message ({e_edit})")
+        try:
             await callback.answer()
         except Exception:
             pass
@@ -435,4 +654,3 @@ async def handle_successful_stars_payment(
         stars_amount=stars_amount,
         i18n_data=i18n_data,
     )
-

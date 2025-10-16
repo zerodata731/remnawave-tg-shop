@@ -427,6 +427,13 @@ async def main_action_callback_handler(
                              subscription_service,
                              session,
                              is_edit=True)
+    elif action == "back_to_main_keep":
+        await send_main_menu(callback,
+                             settings,
+                             i18n_data,
+                             subscription_service,
+                             session,
+                             is_edit=False)
     else:
         i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
         _ = lambda key, **kwargs: i18n.gettext(

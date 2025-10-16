@@ -10,7 +10,7 @@
 -   **Пробная подписка:** Система пробных подписок для новых пользователей (активируется вручную по кнопке).
 -   **Промокоды:** Возможность применять промокоды для получения скидок или бонусных дней.
 -   **Реферальная программа:** Пользователи могут приглашать друзей и получать за это бонусные дни подписки.
--   **Оплата:** Поддержка оплаты через YooKassa, CryptoPay, Telegram Stars и Tribute.
+-   **Оплата:** Поддержка оплаты через YooKassa, FreeKassa (REST API), CryptoPay, Telegram Stars и Tribute.
 
 ### Для администраторов:
 -   **Защищенная админ-панель:** Доступ только для администраторов, указанных в `ADMIN_IDS`.
@@ -27,7 +27,7 @@
 -   **Aiogram 3.x:** Асинхронный фреймворк для Telegram ботов.
 -   **aiohttp:** Для запуска веб-сервера (вебхуки).
 -   **SQLAlchemy 2.x & asyncpg:** Асинхронная работа с базой данных PostgreSQL.
--   **YooKassa, aiocryptopay:** SDK для интеграции с платежными системами.
+-   **YooKassa, FreeKassa API, aiocryptopay:** Интеграции с платежными системами.
 -   **Pydantic:** Для управления настройками из `.env` файла.
 -   **Docker & Docker Compose:** Для контейнеризации и развертывания.
 
@@ -81,6 +81,12 @@
     | `YOOKASSA_SECRET_KEY`| Секретный ключ магазина YooKassa. |
     | `CRYPTOPAY_ENABLED` | Включить/выключить CryptoPay (`true`/`false`). |
     | `CRYPTOPAY_TOKEN` | Токен из вашего CryptoPay App. |
+    | `FREEKASSA_ENABLED` | Включить/выключить FreeKassa (`true`/`false`). |
+    | `FREEKASSA_MERCHANT_ID` | ID вашего магазина в FreeKassa. |
+    | `FREEKASSA_API_KEY` | API-ключ для запросов к FreeKassa REST API. |
+    | `FREEKASSA_SECOND_SECRET` | Секретное слово №2 — используется для проверки уведомлений от FreeKassa. |
+    | `FREEKASSA_PAYMENT_URL` | (Опционально, legacy SCI) Базовый URL платёжной формы FreeKassa. По умолчанию `https://pay.freekassa.ru/`. |
+    | `FREEKASSA_PAYMENT_IP` | Внешний IP вашего сервера, который будет передаваться в запрос оплаты. |
     | `STARS_ENABLED` | Включить/выключить Telegram Stars (`true`/`false`). |
     | `TRIBUTE_ENABLED`| Включить/выключить Tribute (`true`/`false`). |
     </details>
@@ -125,12 +131,13 @@
     Эта команда скачает образ и запустит сервис в фоновом режиме.
 
 4.  **Настройка вебхуков (Обязательно):**
-    Вебхуки являются **обязательным** компонентом для работы бота, так как они используются для получения уведомлений от платежных систем (YooKassa, CryptoPay, Tribute) и панели Remnawave.
+    Вебхуки являются **обязательным** компонентом для работы бота, так как они используются для получения уведомлений от платежных систем (YooKassa, FreeKassa, CryptoPay, Tribute) и панели Remnawave.
 
     Вам понадобится обратный прокси (например, Nginx) для обработки HTTPS-трафика и перенаправления запросов на контейнер с ботом.
 
     **Пути для перенаправления:**
     -   `https://<ваш_домен>/webhook/yookassa` → `http://remnawave-tg-shop:<WEB_SERVER_PORT>/webhook/yookassa`
+    -   `https://<ваш_домен>/webhook/freekassa` → `http://remnawave-tg-shop:<WEB_SERVER_PORT>/webhook/freekassa`
     -   `https://<ваш_домен>/webhook/cryptopay` → `http://remnawave-tg-shop:<WEB_SERVER_PORT>/webhook/cryptopay`
     -   `https://<ваш_домен>/webhook/tribute` → `http://remnawave-tg-shop:<WEB_SERVER_PORT>/webhook/tribute`
     -   `https://<ваш_домен>/webhook/panel` → `http://remnawave-tg-shop:<WEB_SERVER_PORT>/webhook/panel`
